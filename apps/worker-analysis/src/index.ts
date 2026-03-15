@@ -2,22 +2,22 @@ import { Worker } from 'bullmq';
 import { config } from '@ai-agent/config';
 import { logger } from '@ai-agent/observability';
 import { QUEUE_NAMES } from '@ai-agent/core';
-import { analyzeContentJob } from './jobs/analyze-content';
+import { analyzeMediaJob } from './jobs/analyze-media';
 
 async function main() {
-  logger.info('Starting analysis worker...');
+  logger.info('Starting media analysis worker...');
 
   const worker = new Worker(
-    QUEUE_NAMES.ANALYSIS,
+    QUEUE_NAMES.MEDIA_ANALYSIS,
     async (job) => {
-      logger.info({ jobId: job.id, contentId: job.data.contentId }, 'Processing analysis job');
+      logger.info({ jobId: job.id, sessionId: job.data.sessionId }, 'Processing media analysis job');
       
       try {
-        const result = await analyzeContentJob(job);
-        logger.info({ jobId: job.id, result }, 'Analysis completed');
+        const result = await analyzeMediaJob(job);
+        logger.info({ jobId: job.id, result }, 'Media analysis completed');
         return result;
       } catch (error) {
-        logger.error({ jobId: job.id, error }, 'Analysis failed');
+        logger.error({ jobId: job.id, error }, 'Media analysis failed');
         throw error;
       }
     },
@@ -38,7 +38,7 @@ async function main() {
     logger.error({ jobId: job?.id, error: err }, 'Job failed');
   });
 
-  logger.info('Analysis worker started successfully');
+  logger.info('Media analysis worker started successfully');
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
@@ -49,6 +49,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.fatal({ error }, 'Failed to start analysis worker');
+  logger.fatal({ error }, 'Failed to start media analysis worker');
   process.exit(1);
 });

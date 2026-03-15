@@ -2,6 +2,48 @@
 
 **For AI Coding Assistants (Claude Code, Cursor, GitHub Copilot, etc.)**
 
+## 🎯 MVP Product Scope
+
+This is **NOT** a generic content creation system. This is a **specific MVP**:
+
+### User Flow
+1. User uploads video/photo to Telegram
+2. AI agent asks clarifying questions (intent, tone, audience)
+3. System generates **TWO** drafts:
+   - YouTube Short (title + description + hashtags)
+   - Facebook post (text + hashtags)
+4. User approves or requests revisions
+5. System publishes to YouTube & Facebook
+
+### Domain Model (NOT Generic Content!)
+
+```typescript
+// Session-based workflow
+BrandProfile → ContentSession → MediaAssets → DraftPackage → Publish
+
+// NOT generic "Content" with arbitrary types
+// Session has lifecycle: COLLECTING_MEDIA → ASKING_QUESTIONS → GENERATING_DRAFTS → AWAITING_APPROVAL → PUBLISHING
+```
+
+### Workers (MVP-Specific)
+
+| Worker | Job | Output |
+|--------|-----|--------|
+| `worker-analysis` | Analyze uploaded video/photo | Topics, mood, objects, suggested title |
+| `worker-generation` | Generate YouTube Short + Facebook post | DraftPackage with both drafts |
+| `worker-render` | NOT NEEDED in MVP | (Media is user-uploaded) |
+| `worker-publish` | Publish to YouTube & Facebook | Platform post IDs + URLs |
+
+### What NOT to Build (Yet)
+
+❌ Generic platform abstraction (Twitter, LinkedIn, Instagram)  
+❌ Media rendering/generation (Shorts are user videos)  
+❌ Complex approval workflows (just approve/reject/revise)  
+❌ Multi-user collaboration  
+❌ Advanced scheduling  
+
+**Focus**: Make the core session → conversation → generate → publish flow work perfectly for YouTube + Facebook only.
+
 ## 🎯 Core Principles
 
 When working on this codebase, **strictly follow these architectural rules**:

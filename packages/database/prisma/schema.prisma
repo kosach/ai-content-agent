@@ -7,88 +7,204 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id         String    @id @default(cuid())
-  telegramId String?   @unique
-  email      String?   @unique
-  name       String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  contents   Content[]
-  
-  @@map("users")
-}
-
-model Content {
-  id            String        @id @default(cuid())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id])
-  type          ContentType
-  status        ContentStatus @default(DRAFT)
-  generatedText String?       @db.Text
-  mediaUrls     String[]
-  metadata      Json?
-  scheduledFor  DateTime?
-  publishedAt   DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  jobs          Job[]
-  
-  @@map("contents")
-  @@index([userId])
-  @@index([status])
-}
-
-model Job {
+// User's brand profile and settings
+model BrandProfile {
   id          String    @id @default(cuid())
-  contentId   String
-  content     Content   @relation(fields: [contentId], references: [id])
-  type        JobType
-  status      JobStatus @default(PENDING)
-  data        Json
-  result      Json?
-  attempts    Int       @default(0)
-  maxAttempts Int       @default(3)
-  error       String?   @db.Text
+  userId      String    @unique
+  telegramId  String    @unique
+  
+  // Brand identity
+  brandName   String?
+  brandVoice  String?   // tone: professional, casual, etc.
+  targetAudience String?
+  defaultHashtags String[] // default hashtags for posts
+  
+  // Publishing preferences
+  preferredPlatforms String[] // ["youtube", "facebook"]
+  autoPublish Boolean   @default(false)
+  
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  completedAt DateTime?
   
-  @@map("jobs")
-  @@index([contentId])
+  sessions    ContentSession[]
+  connectedAccounts ConnectedAccount[]
+  
+  @@map("brand_profiles")
+}
+
+// Content creation session - conversation + media upload lifecycle
+model ContentSession {
+  id            String        @id @default(cuid())
+  brandProfileId String
+  brandProfile  BrandProfile  @relation(fields: [brandProfileId], references: [id])
+  
+  // Session state
+  status        SessionStatus @default(COLLECTING_MEDIA)
+  
+  // Collected context
+  userIntent    String?       @db.Text // what user wants to create
+  targetPlatforms String[]    // ["youtube", "facebook"]
+  targetAudience String?
+  tone          String?
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  completedAt   DateTime?
+  
+  messages      SessionMessage[]
+  mediaAssets   MediaAsset[]
+  draftPackages DraftPackage[]
+  
+  @@map("content_sessions")
+  @@index([brandProfileId])
   @@index([status])
-  @@index([type])
 }
 
-enum ContentType {
-  TEXT
-  IMAGE
+enum SessionStatus {
+  COLLECTING_MEDIA      // waiting for user to upload files
+  ASKING_QUESTIONS      // agent asking clarifying questions
+  GENERATING_DRAFTS     // system generating YouTube + Facebook drafts
+  AWAITING_APPROVAL     // waiting for user approval/revision
+  APPROVED              // user approved, ready to publish
+  PUBLISHING            // publishing in progress
+  PUBLISHED             // fully published
+  CANCELLED             // user cancelled
+  FAILED                // system error
+}
+
+// Conversation messages within a session
+model SessionMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ContentSession @relation(fields: [sessionId], references: [id])
+  
+  role      MessageRole // user, agent, system
+  content   String   @db.Text
+  metadata  Json?    // attachments, reactions, etc.
+  
+  createdAt DateTime @default(now())
+  
+  @@map("session_messages")
+  @@index([sessionId])
+}
+
+enum MessageRole {
+  USER      // from Telegram user
+  AGENT     // AI agent response
+  SYSTEM    // system notifications
+}
+
+// Uploaded media (videos/photos)
+model MediaAsset {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ContentSession @relation(fields: [sessionId], references: [id])
+  
+  // File info
+  type      MediaType
+  telegramFileId String?
+  storageUrl String   // S3/storage URL
+  filename  String
+  mimeType  String
+  fileSize  Int
+  
+  // Metadata
+  duration  Int?     // for videos, in seconds
+  width     Int?
+  height    Int?
+  thumbnail String?  // thumbnail URL
+  
+  // Processing
+  analyzed  Boolean  @default(false)
+  analysisResult Json? // AI analysis of content
+  
+  createdAt DateTime @default(now())
+  
+  @@map("media_assets")
+  @@index([sessionId])
+}
+
+enum MediaType {
+  PHOTO
   VIDEO
-  CAROUSEL
 }
 
-enum ContentStatus {
-  DRAFT
-  ANALYZING
-  GENERATING
-  RENDERING
-  READY
-  PUBLISHING
-  PUBLISHED
-  FAILED
+// Generated content package (YouTube Short + Facebook post together)
+model DraftPackage {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ContentSession @relation(fields: [sessionId], references: [id])
+  
+  // YouTube Short draft
+  youtubeTitle       String?
+  youtubeDescription String?  @db.Text
+  youtubeHashtags    String[]
+  youtubeThumbnail   String?  // generated/selected thumbnail URL
+  
+  // Facebook post draft
+  facebookText       String?  @db.Text
+  facebookHashtags   String[]
+  
+  // Shared media
+  videoUrl           String?  // processed video for YouTube
+  imageUrls          String[] // images for Facebook carousel
+  
+  // Versioning
+  version            Int      @default(1)
+  status             DraftStatus @default(DRAFT)
+  
+  // Publishing results
+  youtubePostId      String?
+  youtubeUrl         String?
+  facebookPostId     String?
+  facebookUrl        String?
+  
+  publishedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  
+  @@map("draft_packages")
+  @@index([sessionId])
+  @@index([status])
 }
 
-enum JobType {
-  ANALYZE_CONTENT
-  GENERATE_CONTENT
-  RENDER_MEDIA
-  PUBLISH_CONTENT
+enum DraftStatus {
+  DRAFT              // generated, waiting for approval
+  APPROVED           // user approved
+  REVISED            // user requested changes
+  PUBLISHING         // being published
+  PUBLISHED          // successfully published
+  FAILED             // publishing failed
 }
 
-enum JobStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  RETRYING
+// OAuth-connected social accounts
+model ConnectedAccount {
+  id              String   @id @default(cuid())
+  brandProfileId  String
+  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id])
+  
+  platform        Platform
+  platformUserId  String   // user's ID on the platform
+  platformUsername String?
+  
+  // OAuth credentials
+  accessToken     String   @db.Text
+  refreshToken    String?  @db.Text
+  tokenExpiresAt  DateTime?
+  
+  // Status
+  isActive        Boolean  @default(true)
+  lastVerified    DateTime @default(now())
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("connected_accounts")
+  @@unique([brandProfileId, platform])
+  @@index([brandProfileId])
+}
+
+enum Platform {
+  YOUTUBE
+  FACEBOOK
 }

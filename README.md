@@ -6,7 +6,17 @@
 [![Turborepo](https://img.shields.io/badge/Turborepo-latest-red.svg)](https://turbo.build/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A production-ready AI-powered content creation and distribution system built as a scalable monorepo.
+Transform videos and photos into engaging social media content. Upload to Telegram → AI conversation → Get YouTube Shorts + Facebook posts ready to publish.
+
+## 🎯 MVP Product
+
+Upload media to Telegram bot → Agent asks questions about your intent and audience → System generates:
+- **YouTube Short** (title, description, hashtags)
+- **Facebook post** (text, hashtags)
+
+Approve or revise → Publish to both platforms instantly.
+
+**Focus**: YouTube Shorts + Facebook. Session-based workflow. Real user media.
 
 ## 🏗️ Architecture
 

@@ -1,21 +1,21 @@
 export enum JobType {
-  ANALYZE_CONTENT = 'analyze_content',
-  GENERATE_CONTENT = 'generate_content',
-  RENDER_MEDIA = 'render_media',
-  PUBLISH_CONTENT = 'publish_content',
+  ANALYZE_MEDIA = 'ANALYZE_MEDIA',           // Analyze uploaded video/photo
+  GENERATE_DRAFTS = 'GENERATE_DRAFTS',       // Generate YouTube + Facebook drafts
+  PUBLISH_YOUTUBE = 'PUBLISH_YOUTUBE',       // Publish to YouTube
+  PUBLISH_FACEBOOK = 'PUBLISH_FACEBOOK',     // Publish to Facebook
 }
 
 export enum JobStatus {
-  PENDING = 'pending',
-  PROCESSING = 'processing',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  RETRYING = 'retrying',
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  RETRYING = 'RETRYING',
 }
 
 export interface JobData {
-  contentId: string;
-  userId: string;
+  sessionId: string;
+  brandProfileId: string;
   [key: string]: any;
 }
 
