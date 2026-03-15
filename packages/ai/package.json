@@ -1,0 +1,22 @@
+{
+  "name": "@ai-agent/ai",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ai-agent/core": "workspace:*",
+    "@ai-agent/observability": "workspace:*",
+    "openai": "^4.77.3",
+    "@anthropic-ai/sdk": "^0.34.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2"
+  }
+}

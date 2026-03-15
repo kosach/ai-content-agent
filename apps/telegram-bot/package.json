@@ -1,0 +1,29 @@
+{
+  "name": "@ai-agent/telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ai-agent/core": "workspace:*",
+    "@ai-agent/database": "workspace:*",
+    "@ai-agent/queue": "workspace:*",
+    "@ai-agent/config": "workspace:*",
+    "@ai-agent/observability": "workspace:*",
+    "@ai-agent/utils": "workspace:*",
+    "telegraf": "^4.16.3",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

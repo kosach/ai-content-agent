@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String    @id @default(cuid())
+  telegramId String?   @unique
+  email      String?   @unique
+  name       String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  contents   Content[]
+  
+  @@map("users")
+}
+
+model Content {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  type          ContentType
+  status        ContentStatus @default(DRAFT)
+  generatedText String?       @db.Text
+  mediaUrls     String[]
+  metadata      Json?
+  scheduledFor  DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  jobs          Job[]
+  
+  @@map("contents")
+  @@index([userId])
+  @@index([status])
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  contentId   String
+  content     Content   @relation(fields: [contentId], references: [id])
+  type        JobType
+  status      JobStatus @default(PENDING)
+  data        Json
+  result      Json?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+  
+  @@map("jobs")
+  @@index([contentId])
+  @@index([status])
+  @@index([type])
+}
+
+enum ContentType {
+  TEXT
+  IMAGE
+  VIDEO
+  CAROUSEL
+}
+
+enum ContentStatus {
+  DRAFT
+  ANALYZING
+  GENERATING
+  RENDERING
+  READY
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum JobType {
+  ANALYZE_CONTENT
+  GENERATE_CONTENT
+  RENDER_MEDIA
+  PUBLISH_CONTENT
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  RETRYING
+}

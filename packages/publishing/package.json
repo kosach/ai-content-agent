@@ -1,0 +1,22 @@
+{
+  "name": "@ai-agent/publishing",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ai-agent/core": "workspace:*",
+    "@ai-agent/observability": "workspace:*",
+    "twitter-api-v2": "^1.17.4",
+    "instagram-private-api": "^1.47.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2"
+  }
+}
