@@ -7,85 +7,101 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User's brand profile and settings
+// System user (maps to Telegram user)
+model User {
+  id         String   @id @default(cuid())
+  telegramId String   @unique
+  username   String?
+  firstName  String?
+  lastName   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  brandProfile BrandProfile?
+  
+  @@map("users")
+}
+
+// Brand profile and publishing preferences
 model BrandProfile {
-  id          String    @id @default(cuid())
-  userId      String    @unique
-  telegramId  String    @unique
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
   
   // Brand identity
-  brandName   String?
-  brandVoice  String?   // tone: professional, casual, etc.
-  targetAudience String?
-  defaultHashtags String[] // default hashtags for posts
+  brandName       String?
+  brandVoice      String?   // "professional", "casual", "funny", etc.
+  targetAudience  String?
+  defaultHashtags String[]
   
   // Publishing preferences
-  preferredPlatforms String[] // ["youtube", "facebook"]
-  autoPublish Boolean   @default(false)
+  autoPublish     Boolean   @default(false)
   
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
-  sessions    ContentSession[]
+  sessions          ContentSession[]
   connectedAccounts ConnectedAccount[]
   
   @@map("brand_profiles")
 }
 
-// Content creation session - conversation + media upload lifecycle
+// Content creation session (conversation lifecycle)
 model ContentSession {
-  id            String        @id @default(cuid())
+  id             String        @id @default(cuid())
   brandProfileId String
-  brandProfile  BrandProfile  @relation(fields: [brandProfileId], references: [id])
+  brandProfile   BrandProfile  @relation(fields: [brandProfileId], references: [id])
   
   // Session state
-  status        SessionStatus @default(COLLECTING_MEDIA)
+  status         SessionStatus @default(COLLECTING_MEDIA)
   
-  // Collected context
-  userIntent    String?       @db.Text // what user wants to create
-  targetPlatforms String[]    // ["youtube", "facebook"]
-  targetAudience String?
-  tone          String?
+  // Collected context from conversation
+  userIntent     String?       @db.Text // what user wants to create
+  tone           String?       // "professional", "casual", "funny", etc.
   
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  completedAt   DateTime?
+  // Metadata
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  completedAt    DateTime?
   
   messages      SessionMessage[]
   mediaAssets   MediaAsset[]
   draftPackages DraftPackage[]
+  publishJobs   PublishJob[]
   
   @@map("content_sessions")
   @@index([brandProfileId])
   @@index([status])
+  @@index([createdAt])
 }
 
 enum SessionStatus {
-  COLLECTING_MEDIA      // waiting for user to upload files
+  COLLECTING_MEDIA      // waiting for user to upload media
   ASKING_QUESTIONS      // agent asking clarifying questions
-  GENERATING_DRAFTS     // system generating YouTube + Facebook drafts
-  AWAITING_APPROVAL     // waiting for user approval/revision
+  GENERATING_DRAFTS     // generating YouTube Short + Facebook post
+  AWAITING_APPROVAL     // waiting for user to approve/revise
   APPROVED              // user approved, ready to publish
   PUBLISHING            // publishing in progress
-  PUBLISHED             // fully published
+  PUBLISHED             // successfully published
   CANCELLED             // user cancelled
   FAILED                // system error
 }
 
 // Conversation messages within a session
 model SessionMessage {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   sessionId String
-  session   ContentSession @relation(fields: [sessionId], references: [id])
+  session   ContentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   
-  role      MessageRole // user, agent, system
-  content   String   @db.Text
-  metadata  Json?    // attachments, reactions, etc.
+  role      MessageRole
+  content   String      @db.Text
+  metadata  Json?       // { telegramMessageId, fileId, etc. }
   
-  createdAt DateTime @default(now())
+  createdAt DateTime    @default(now())
   
   @@map("session_messages")
   @@index([sessionId])
+  @@index([createdAt])
 }
 
 enum MessageRole {
@@ -94,34 +110,35 @@ enum MessageRole {
   SYSTEM    // system notifications
 }
 
-// Uploaded media (videos/photos)
+// Uploaded media (videos/photos from Telegram)
 model MediaAsset {
   id        String   @id @default(cuid())
   sessionId String
-  session   ContentSession @relation(fields: [sessionId], references: [id])
+  session   ContentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   
   // File info
-  type      MediaType
-  telegramFileId String?
-  storageUrl String   // S3/storage URL
-  filename  String
-  mimeType  String
-  fileSize  Int
+  type           MediaType
+  telegramFileId String
+  storageUrl     String?   // S3 URL after upload
+  filename       String
+  mimeType       String
+  fileSize       Int
   
-  // Metadata
+  // Media metadata
   duration  Int?     // for videos, in seconds
   width     Int?
   height    Int?
-  thumbnail String?  // thumbnail URL
+  thumbnail String?  // thumbnail URL for videos
   
-  // Processing
-  analyzed  Boolean  @default(false)
-  analysisResult Json? // AI analysis of content
+  // AI analysis result
+  analyzed       Boolean @default(false)
+  analysisResult Json?   // { topics, mood, objects, suggestedTitle, etc. }
   
   createdAt DateTime @default(now())
   
   @@map("media_assets")
   @@index([sessionId])
+  @@index([telegramFileId])
 }
 
 enum MediaType {
@@ -129,39 +146,34 @@ enum MediaType {
   VIDEO
 }
 
-// Generated content package (YouTube Short + Facebook post together)
+// Generated draft package (YouTube Short + Facebook post together)
 model DraftPackage {
   id        String   @id @default(cuid())
   sessionId String
-  session   ContentSession @relation(fields: [sessionId], references: [id])
+  session   ContentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   
   // YouTube Short draft
   youtubeTitle       String?
   youtubeDescription String?  @db.Text
   youtubeHashtags    String[]
-  youtubeThumbnail   String?  // generated/selected thumbnail URL
   
   // Facebook post draft
-  facebookText       String?  @db.Text
-  facebookHashtags   String[]
+  facebookText     String?  @db.Text
+  facebookHashtags String[]
   
-  // Shared media
-  videoUrl           String?  // processed video for YouTube
-  imageUrls          String[] // images for Facebook carousel
+  // Shared media references
+  primaryVideoId String? // MediaAsset.id for YouTube Short
+  primaryImageId String? // MediaAsset.id for Facebook (if using photo)
   
-  // Versioning
-  version            Int      @default(1)
-  status             DraftStatus @default(DRAFT)
+  // Versioning & approval
+  version   Int         @default(1)
+  status    DraftStatus @default(DRAFT)
   
-  // Publishing results
-  youtubePostId      String?
-  youtubeUrl         String?
-  facebookPostId     String?
-  facebookUrl        String?
+  // User feedback for revisions
+  revisionRequest String? @db.Text
   
-  publishedAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
   @@map("draft_packages")
   @@index([sessionId])
@@ -171,40 +183,76 @@ model DraftPackage {
 enum DraftStatus {
   DRAFT              // generated, waiting for approval
   APPROVED           // user approved
-  REVISED            // user requested changes
-  PUBLISHING         // being published
+  NEEDS_REVISION     // user requested changes
   PUBLISHED          // successfully published
   FAILED             // publishing failed
 }
 
-// OAuth-connected social accounts
-model ConnectedAccount {
-  id              String   @id @default(cuid())
-  brandProfileId  String
-  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id])
+// Publishing jobs (one per platform)
+model PublishJob {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ContentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   
-  platform        Platform
-  platformUserId  String   // user's ID on the platform
-  platformUsername String?
+  draftPackageId String
   
-  // OAuth credentials
-  accessToken     String   @db.Text
-  refreshToken    String?  @db.Text
-  tokenExpiresAt  DateTime?
+  platform       Platform
+  status         PublishJobStatus @default(PENDING)
   
-  // Status
-  isActive        Boolean  @default(true)
-  lastVerified    DateTime @default(now())
+  // Publishing result
+  platformPostId String?  // YouTube video ID or Facebook post ID
+  platformUrl    String?  // Full URL to published content
+  error          String?  @db.Text
   
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  attempts       Int      @default(0)
+  maxAttempts    Int      @default(3)
   
-  @@map("connected_accounts")
-  @@unique([brandProfileId, platform])
-  @@index([brandProfileId])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  publishedAt    DateTime?
+  
+  @@map("publish_jobs")
+  @@index([sessionId])
+  @@index([status])
+  @@index([platform])
+}
+
+enum PublishJobStatus {
+  PENDING
+  UPLOADING
+  COMPLETED
+  FAILED
+  RETRYING
 }
 
 enum Platform {
   YOUTUBE
   FACEBOOK
+}
+
+// OAuth-connected social accounts
+model ConnectedAccount {
+  id             String   @id @default(cuid())
+  brandProfileId String
+  brandProfile   BrandProfile @relation(fields: [brandProfileId], references: [id])
+  
+  platform       Platform
+  platformUserId String   // user's ID on the platform
+  username       String?  // @username or page name
+  
+  // OAuth credentials
+  accessToken    String   @db.Text
+  refreshToken   String?  @db.Text
+  expiresAt      DateTime?
+  
+  // Account status
+  isActive       Boolean  @default(true)
+  lastVerified   DateTime @default(now())
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@map("connected_accounts")
+  @@unique([brandProfileId, platform])
+  @@index([brandProfileId])
 }

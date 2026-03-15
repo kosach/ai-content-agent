@@ -5,6 +5,55 @@ export enum JobType {
   PUBLISH_FACEBOOK = 'PUBLISH_FACEBOOK',     // Publish to Facebook
 }
 
+// Queue payload for ANALYZE_MEDIA
+export interface AnalyzeMediaJobData {
+  sessionId: string;
+  brandProfileId: string;
+  mediaAssetId: string;
+  mediaType: 'PHOTO' | 'VIDEO';
+  telegramFileId: string;
+}
+
+// Queue payload for GENERATE_DRAFTS
+export interface GenerateDraftsJobData {
+  sessionId: string;
+  brandProfileId: string;
+  userIntent: string;
+  tone: string;
+  mediaAnalysis: {
+    topics: string[];
+    mood: string;
+    objects: string[];
+    suggestedTitle: string;
+    contentType: string;
+    targetAudience: string;
+  };
+}
+
+// Queue payload for PUBLISH_YOUTUBE
+export interface PublishYouTubeJobData {
+  sessionId: string;
+  brandProfileId: string;
+  draftPackageId: string;
+  publishJobId: string;
+  connectedAccountId: string;
+}
+
+// Queue payload for PUBLISH_FACEBOOK
+export interface PublishFacebookJobData {
+  sessionId: string;
+  brandProfileId: string;
+  draftPackageId: string;
+  publishJobId: string;
+  connectedAccountId: string;
+}
+
+export type JobData =
+  | AnalyzeMediaJobData
+  | GenerateDraftsJobData
+  | PublishYouTubeJobData
+  | PublishFacebookJobData;
+
 export enum JobStatus {
   PENDING = 'PENDING',
   PROCESSING = 'PROCESSING',
@@ -13,27 +62,8 @@ export enum JobStatus {
   RETRYING = 'RETRYING',
 }
 
-export interface JobData {
-  sessionId: string;
-  brandProfileId: string;
-  [key: string]: any;
-}
-
 export interface JobResult {
   success: boolean;
   data?: any;
   error?: string;
-}
-
-export interface Job {
-  id: string;
-  type: JobType;
-  status: JobStatus;
-  data: JobData;
-  result?: JobResult;
-  attempts: number;
-  maxAttempts: number;
-  createdAt: Date;
-  updatedAt: Date;
-  completedAt?: Date;
 }

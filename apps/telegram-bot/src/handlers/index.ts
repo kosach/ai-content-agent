@@ -2,36 +2,38 @@ import { Telegraf, Context } from 'telegraf';
 import { Message } from 'telegraf/types';
 import { database } from '@ai-agent/database';
 import { queueService } from '@ai-agent/queue';
-import { conversationAgent } from '@ai-agent/ai';
+import { contentAgent } from '@ai-agent/ai';
 import { 
   SessionStatus, 
   MessageRole, 
   JobType,
   MediaType,
+  AnalyzeMediaJobData,
+  GenerateDraftsJobData,
 } from '@ai-agent/core';
 import { logger } from '@ai-agent/observability';
 
 /**
- * Register all Telegram bot handlers
+ * Telegram Bot Handlers - MVP Flow
  * 
- * THIN HANDLER PATTERN:
- * - Save media/message to database
- * - Get conversation agent's response
- * - Enqueue background jobs
- * - Reply to user
+ * Flow:
+ * 1. User uploads photo/video → handlePhoto/handleVideo
+ * 2. Create/resume session, save media
+ * 3. Enqueue ANALYZE_MEDIA job
+ * 4. Agent asks clarifying questions
+ * 5. User answers → handleText → extract context
+ * 6. When ready → Enqueue GENERATE_DRAFTS
+ * 7. Present drafts → handleText (approval) → Enqueue PUBLISH jobs
  * 
- * NO business logic here - delegate to services!
+ * THIN HANDLERS - no business logic, only orchestration!
  */
 export function registerHandlers(bot: Telegraf) {
   bot.command('start', handleStart);
   bot.command('cancel', handleCancel);
   bot.command('status', handleStatus);
   
-  // Media uploads (photos/videos)
   bot.on('photo', handlePhoto);
   bot.on('video', handleVideo);
-  
-  // Text messages (conversation)
   bot.on('text', handleText);
 }
 
@@ -39,34 +41,41 @@ async function handleStart(ctx: Context) {
   if (!ctx.from) return;
 
   try {
-    // Get or create brand profile
-    const brandProfile = await database.brandProfile.upsert({
+    // Get or create User + BrandProfile
+    const user = await database.user.upsert({
       where: { telegramId: ctx.from.id.toString() },
       update: {},
       create: {
-        userId: ctx.from.id.toString(),
         telegramId: ctx.from.id.toString(),
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name,
+      },
+    });
+
+    await database.brandProfile.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
         brandName: ctx.from.first_name || undefined,
         defaultHashtags: [],
-        preferredPlatforms: ['YOUTUBE', 'FACEBOOK'],
         autoPublish: false,
       },
     });
 
     await ctx.reply(
       '👋 Welcome to AI Content Agent!\n\n' +
-      'I help you create:\n' +
-      '📹 YouTube Shorts\n' +
-      '📱 Facebook posts\n\n' +
-      'Just upload a video or photo to get started!\n\n' +
+      'I help you create YouTube Shorts and Facebook posts from your videos and photos.\n\n' +
+      '📹 Upload a video or 📸 photo to start!\n\n' +
       'Commands:\n' +
       '/cancel - Cancel current session\n' +
       '/status - Check session status'
     );
 
-    logger.info({ brandProfileId: brandProfile.id }, 'User started bot');
+    logger.info({ userId: user.id }, 'User started bot');
   } catch (error) {
-    logger.error({ error, userId: ctx.from.id }, 'Failed to start bot');
+    logger.error({ error, telegramId: ctx.from.id }, 'Failed to start bot');
     await ctx.reply('Sorry, something went wrong. Please try again.');
   }
 }
@@ -74,39 +83,29 @@ async function handleStart(ctx: Context) {
 async function handlePhoto(ctx: Context) {
   if (!ctx.from || !ctx.message || !('photo' in ctx.message)) return;
 
-  try {
-    const photo = ctx.message.photo[ctx.message.photo.length - 1]; // largest size
-    await handleMediaUpload(ctx, {
-      type: MediaType.PHOTO,
-      fileId: photo.file_id,
-      fileSize: photo.file_size || 0,
-      width: photo.width,
-      height: photo.height,
-    });
-  } catch (error) {
-    logger.error({ error }, 'Failed to handle photo');
-    await ctx.reply('Failed to process photo. Please try again.');
-  }
+  const photo = ctx.message.photo[ctx.message.photo.length - 1];
+  await handleMediaUpload(ctx, {
+    type: MediaType.PHOTO,
+    fileId: photo.file_id,
+    fileSize: photo.file_size || 0,
+    width: photo.width,
+    height: photo.height,
+  });
 }
 
 async function handleVideo(ctx: Context) {
   if (!ctx.from || !ctx.message || !('video' in ctx.message)) return;
 
-  try {
-    const video = ctx.message.video;
-    await handleMediaUpload(ctx, {
-      type: MediaType.VIDEO,
-      fileId: video.file_id,
-      fileSize: video.file_size || 0,
-      width: video.width,
-      height: video.height,
-      duration: video.duration,
-      thumbnail: video.thumbnail?.file_id,
-    });
-  } catch (error) {
-    logger.error({ error }, 'Failed to handle video');
-    await ctx.reply('Failed to process video. Please try again.');
-  }
+  const video = ctx.message.video;
+  await handleMediaUpload(ctx, {
+    type: MediaType.VIDEO,
+    fileId: video.file_id,
+    fileSize: video.file_size || 0,
+    width: video.width,
+    height: video.height,
+    duration: video.duration,
+    thumbnail: video.thumbnail?.file_id,
+  });
 }
 
 async function handleMediaUpload(
@@ -123,105 +122,115 @@ async function handleMediaUpload(
 ) {
   if (!ctx.from) return;
 
-  const brandProfile = await getOrCreateBrandProfile(ctx.from.id.toString());
+  try {
+    const user = await getOrCreateUser(ctx.from);
+    const brandProfile = await getBrandProfile(user.id);
 
-  // Get or create active session
-  let session = await database.contentSession.findFirst({
-    where: {
-      brandProfileId: brandProfile.id,
-      status: {
-        in: [SessionStatus.COLLECTING_MEDIA, SessionStatus.ASKING_QUESTIONS],
-      },
-    },
-  });
-
-  if (!session) {
-    session = await database.contentSession.create({
-      data: {
+    // Get or create active session
+    let session = await database.contentSession.findFirst({
+      where: {
         brandProfileId: brandProfile.id,
-        status: SessionStatus.COLLECTING_MEDIA,
-        targetPlatforms: ['YOUTUBE', 'FACEBOOK'],
+        status: {
+          in: [SessionStatus.COLLECTING_MEDIA, SessionStatus.ASKING_QUESTIONS],
+        },
       },
     });
-  }
 
-  // Save media asset (storage URL will be set by worker)
-  await database.mediaAsset.create({
-    data: {
+    if (!session) {
+      session = await database.contentSession.create({
+        data: {
+          brandProfileId: brandProfile.id,
+          status: SessionStatus.COLLECTING_MEDIA,
+        },
+      });
+    }
+
+    // Save media asset
+    const mediaAsset = await database.mediaAsset.create({
+      data: {
+        sessionId: session.id,
+        type: media.type,
+        telegramFileId: media.fileId,
+        filename: `${media.fileId}.${media.type === MediaType.VIDEO ? 'mp4' : 'jpg'}`,
+        mimeType: media.type === MediaType.VIDEO ? 'video/mp4' : 'image/jpeg',
+        fileSize: media.fileSize,
+        width: media.width,
+        height: media.height,
+        duration: media.duration,
+        thumbnail: media.thumbnail,
+      },
+    });
+
+    // Save user message
+    await database.sessionMessage.create({
+      data: {
+        sessionId: session.id,
+        role: MessageRole.USER,
+        content: `[Uploaded ${media.type}]`,
+        metadata: { 
+          fileId: media.fileId,
+          telegramMessageId: ctx.message?.message_id,
+        },
+      },
+    });
+
+    // Enqueue ANALYZE_MEDIA job with proper payload
+    const jobData: AnalyzeMediaJobData = {
       sessionId: session.id,
-      type: media.type,
+      brandProfileId: brandProfile.id,
+      mediaAssetId: mediaAsset.id,
+      mediaType: media.type,
       telegramFileId: media.fileId,
-      storageUrl: '', // Placeholder, will be uploaded by worker
-      filename: `${media.fileId}.${media.type === MediaType.VIDEO ? 'mp4' : 'jpg'}`,
-      mimeType: media.type === MediaType.VIDEO ? 'video/mp4' : 'image/jpeg',
-      fileSize: media.fileSize,
-      width: media.width,
-      height: media.height,
-      duration: media.duration,
-      thumbnail: media.thumbnail,
-    },
-  });
+    };
 
-  // Save user message
-  await database.sessionMessage.create({
-    data: {
+    await queueService.enqueue(JobType.ANALYZE_MEDIA, jobData);
+
+    // Update session status
+    await database.contentSession.update({
+      where: { id: session.id },
+      data: { status: SessionStatus.ASKING_QUESTIONS },
+    });
+
+    // Get next question from content agent
+    const mediaCount = await database.mediaAsset.count({
+      where: { sessionId: session.id },
+    });
+
+    const agentResponse = await contentAgent.getNextQuestion({
       sessionId: session.id,
-      role: MessageRole.USER,
-      content: `[Uploaded ${media.type}]`,
-      metadata: { fileId: media.fileId },
-    },
-  });
+      status: session.status,
+      mediaCount,
+      hasUserIntent: !!session.userIntent,
+      hasTone: !!session.tone,
+      messages: [],
+    });
 
-  // Enqueue media analysis job
-  await queueService.enqueue(JobType.ANALYZE_MEDIA, {
-    sessionId: session.id,
-    brandProfileId: brandProfile.id,
-    mediaType: media.type,
-    telegramFileId: media.fileId,
-  });
+    // Save agent response
+    await database.sessionMessage.create({
+      data: {
+        sessionId: session.id,
+        role: MessageRole.AGENT,
+        content: agentResponse.message,
+      },
+    });
 
-  // Update session status
-  await database.contentSession.update({
-    where: { id: session.id },
-    data: { status: SessionStatus.ASKING_QUESTIONS },
-  });
+    await ctx.reply(agentResponse.message);
 
-  // Get conversation agent's next question
-  const mediaCount = await database.mediaAsset.count({
-    where: { sessionId: session.id },
-  });
-
-  const agentResponse = await conversationAgent.getNextQuestion({
-    sessionId: session.id,
-    status: session.status,
-    messages: [],
-    mediaCount,
-    hasUserIntent: !!session.userIntent,
-    hasTargetPlatforms: session.targetPlatforms.length > 0,
-    hasTone: !!session.tone,
-  });
-
-  // Save agent response
-  await database.sessionMessage.create({
-    data: {
-      sessionId: session.id,
-      role: MessageRole.AGENT,
-      content: agentResponse.message,
-    },
-  });
-
-  await ctx.reply(agentResponse.message);
-
-  logger.info({ sessionId: session.id, mediaType: media.type }, 'Media uploaded');
+    logger.info({ sessionId: session.id, mediaType: media.type }, 'Media uploaded');
+  } catch (error) {
+    logger.error({ error }, 'Failed to handle media upload');
+    await ctx.reply('Failed to process media. Please try again.');
+  }
 }
 
 async function handleText(ctx: Context) {
   if (!ctx.from || !ctx.message || !('text' in ctx.message)) return;
-  
+
   const text = ctx.message.text;
 
   try {
-    const brandProfile = await getOrCreateBrandProfile(ctx.from.id.toString());
+    const user = await getOrCreateUser(ctx.from);
+    const brandProfile = await getBrandProfile(user.id);
 
     // Get active session
     const session = await database.contentSession.findFirst({
@@ -229,7 +238,6 @@ async function handleText(ctx: Context) {
         brandProfileId: brandProfile.id,
         status: {
           in: [
-            SessionStatus.COLLECTING_MEDIA,
             SessionStatus.ASKING_QUESTIONS,
             SessionStatus.AWAITING_APPROVAL,
           ],
@@ -242,9 +250,7 @@ async function handleText(ctx: Context) {
     });
 
     if (!session) {
-      await ctx.reply(
-        'No active session. Upload a photo or video to start creating content!'
-      );
+      await ctx.reply('No active session. Upload a photo or video to start!');
       return;
     }
 
@@ -254,10 +260,11 @@ async function handleText(ctx: Context) {
         sessionId: session.id,
         role: MessageRole.USER,
         content: text,
+        metadata: { telegramMessageId: ctx.message.message_id },
       },
     });
 
-    // Handle based on session status
+    // Route based on session status
     if (session.status === SessionStatus.AWAITING_APPROVAL) {
       await handleApproval(ctx, session, text);
     } else {
@@ -270,36 +277,38 @@ async function handleText(ctx: Context) {
 }
 
 async function handleConversation(ctx: Context, session: any, text: string) {
-  // Process user's response
-  const extracted = await conversationAgent.processUserResponse(text, {
+  // Extract context from user's message
+  const extracted = await contentAgent.extractContext(text, {
     sessionId: session.id,
     status: session.status,
-    messages: session.messages,
     mediaCount: session.mediaAssets.length,
     hasUserIntent: !!session.userIntent,
-    hasTargetPlatforms: session.targetPlatforms.length > 0,
     hasTone: !!session.tone,
+    messages: session.messages,
   });
 
-  // Update session with extracted context
+  // Update session
   await database.contentSession.update({
     where: { id: session.id },
     data: {
       userIntent: extracted.userIntent || session.userIntent,
       tone: extracted.tone || session.tone,
-      targetPlatforms: extracted.targetPlatforms || session.targetPlatforms,
     },
   });
 
   // Get next question
-  const agentResponse = await conversationAgent.getNextQuestion({
+  const updatedSession = await database.contentSession.findUnique({
+    where: { id: session.id },
+    include: { mediaAssets: true },
+  });
+
+  const agentResponse = await contentAgent.getNextQuestion({
     sessionId: session.id,
     status: session.status,
-    messages: session.messages,
-    mediaCount: session.mediaAssets.length,
-    hasUserIntent: !!(extracted.userIntent || session.userIntent),
-    hasTargetPlatforms: (extracted.targetPlatforms || session.targetPlatforms).length > 0,
-    hasTone: !!(extracted.tone || session.tone),
+    mediaCount: updatedSession!.mediaAssets.length,
+    hasUserIntent: !!updatedSession!.userIntent,
+    hasTone: !!updatedSession!.tone,
+    messages: [],
   });
 
   // Save agent response
@@ -313,22 +322,39 @@ async function handleConversation(ctx: Context, session: any, text: string) {
 
   await ctx.reply(agentResponse.message);
 
-  // If ready to generate, update status and enqueue job
-  if (agentResponse.shouldGenerateDrafts) {
+  // If ready to generate, enqueue job
+  if (agentResponse.shouldGenerateDrafts && updatedSession!.userIntent && updatedSession!.tone) {
     await database.contentSession.update({
       where: { id: session.id },
       data: { status: SessionStatus.GENERATING_DRAFTS },
     });
 
-    await queueService.enqueue(JobType.GENERATE_DRAFTS, {
+    // Get media analysis
+    const mediaAsset = updatedSession!.mediaAssets[0];
+    const analysis = mediaAsset.analysisResult as any;
+
+    // Enqueue GENERATE_DRAFTS with proper payload
+    const jobData: GenerateDraftsJobData = {
       sessionId: session.id,
-      brandProfileId: session.brandProfileId,
-    });
+      brandProfileId: updatedSession!.brandProfileId,
+      userIntent: updatedSession!.userIntent,
+      tone: updatedSession!.tone,
+      mediaAnalysis: analysis || {
+        topics: [],
+        mood: 'neutral',
+        objects: [],
+        suggestedTitle: '',
+        contentType: 'general',
+        targetAudience: 'general',
+      },
+    };
+
+    await queueService.enqueue(JobType.GENERATE_DRAFTS, jobData);
   }
 }
 
 async function handleApproval(ctx: Context, session: any, text: string) {
-  const result = await conversationAgent.handleApprovalResponse(text);
+  const result = await contentAgent.handleApproval(text);
 
   if (result.approved) {
     await database.contentSession.update({
@@ -336,104 +362,144 @@ async function handleApproval(ctx: Context, session: any, text: string) {
       data: { status: SessionStatus.APPROVED },
     });
 
-    await ctx.reply('Great! Publishing your content...');
+    await ctx.reply('✅ Great! Publishing to YouTube and Facebook...');
 
-    // Enqueue publishing jobs
-    await queueService.enqueue(JobType.PUBLISH_YOUTUBE, {
-      sessionId: session.id,
-      brandProfileId: session.brandProfileId,
-    });
-
-    await queueService.enqueue(JobType.PUBLISH_FACEBOOK, {
-      sessionId: session.id,
-      brandProfileId: session.brandProfileId,
-    });
+    // TODO: Enqueue PUBLISH_YOUTUBE and PUBLISH_FACEBOOK jobs
+    // Need to get draft package and connected accounts first
+    
+    logger.info({ sessionId: session.id }, 'Drafts approved, publishing');
   } else {
     await ctx.reply(
-      'Got it! I\'ll revise the drafts based on your feedback.\n\n' +
-      'What would you like me to change?'
+      'Got it! What would you like me to change?\n\n' +
+      'Be specific (e.g., "Make it more casual" or "Change the hashtags")'
     );
 
-    // TODO: Implement revision flow
+    // Save revision request
+    const draftPackage = await database.draftPackage.findFirst({
+      where: { sessionId: session.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (draftPackage) {
+      await database.draftPackage.update({
+        where: { id: draftPackage.id },
+        data: {
+          status: 'NEEDS_REVISION',
+          revisionRequest: result.revisionRequest,
+        },
+      });
+    }
   }
 }
 
 async function handleCancel(ctx: Context) {
   if (!ctx.from) return;
 
-  const brandProfile = await getOrCreateBrandProfile(ctx.from.id.toString());
+  try {
+    const user = await getOrCreateUser(ctx.from);
+    const brandProfile = await getBrandProfile(user.id);
 
-  const session = await database.contentSession.findFirst({
-    where: {
-      brandProfileId: brandProfile.id,
-      status: {
-        notIn: [SessionStatus.PUBLISHED, SessionStatus.CANCELLED, SessionStatus.FAILED],
+    const session = await database.contentSession.findFirst({
+      where: {
+        brandProfileId: brandProfile.id,
+        status: {
+          notIn: [SessionStatus.PUBLISHED, SessionStatus.CANCELLED, SessionStatus.FAILED],
+        },
       },
-    },
-  });
-
-  if (session) {
-    await database.contentSession.update({
-      where: { id: session.id },
-      data: { status: SessionStatus.CANCELLED },
     });
 
-    await ctx.reply('Session cancelled. Upload new media to start again!');
-  } else {
-    await ctx.reply('No active session to cancel.');
+    if (session) {
+      await database.contentSession.update({
+        where: { id: session.id },
+        data: { status: SessionStatus.CANCELLED },
+      });
+
+      await ctx.reply('✅ Session cancelled. Upload new media to start again!');
+    } else {
+      await ctx.reply('No active session to cancel.');
+    }
+  } catch (error) {
+    logger.error({ error }, 'Failed to cancel session');
+    await ctx.reply('Failed to cancel session.');
   }
 }
 
 async function handleStatus(ctx: Context) {
   if (!ctx.from) return;
 
-  const brandProfile = await getOrCreateBrandProfile(ctx.from.id.toString());
+  try {
+    const user = await getOrCreateUser(ctx.from);
+    const brandProfile = await getBrandProfile(user.id);
 
-  const session = await database.contentSession.findFirst({
-    where: {
-      brandProfileId: brandProfile.id,
-      status: {
-        notIn: [SessionStatus.PUBLISHED, SessionStatus.CANCELLED, SessionStatus.FAILED],
+    const session = await database.contentSession.findFirst({
+      where: {
+        brandProfileId: brandProfile.id,
+        status: {
+          notIn: [SessionStatus.PUBLISHED, SessionStatus.CANCELLED, SessionStatus.FAILED],
+        },
       },
-    },
-    include: {
-      mediaAssets: true,
-      draftPackages: true,
-    },
-  });
+      include: {
+        mediaAssets: true,
+        draftPackages: true,
+      },
+    });
 
-  if (!session) {
-    await ctx.reply('No active session. Upload media to start!');
-    return;
+    if (!session) {
+      await ctx.reply('No active session. Upload media to start!');
+      return;
+    }
+
+    const statusEmoji: Record<SessionStatus, string> = {
+      [SessionStatus.COLLECTING_MEDIA]: '📤',
+      [SessionStatus.ASKING_QUESTIONS]: '💬',
+      [SessionStatus.GENERATING_DRAFTS]: '🤖',
+      [SessionStatus.AWAITING_APPROVAL]: '👀',
+      [SessionStatus.APPROVED]: '✅',
+      [SessionStatus.PUBLISHING]: '🚀',
+      [SessionStatus.PUBLISHED]: '🎉',
+      [SessionStatus.CANCELLED]: '❌',
+      [SessionStatus.FAILED]: '⚠️',
+    };
+
+    await ctx.reply(
+      `${statusEmoji[session.status]} Status: ${session.status}\n\n` +
+      `📁 Media: ${session.mediaAssets.length}\n` +
+      `📝 Drafts: ${session.draftPackages.length}\n` +
+      `🕒 Started: ${session.createdAt.toLocaleString()}`
+    );
+  } catch (error) {
+    logger.error({ error }, 'Failed to get status');
+    await ctx.reply('Failed to get status.');
   }
-
-  const statusEmoji = {
-    [SessionStatus.COLLECTING_MEDIA]: '📤',
-    [SessionStatus.ASKING_QUESTIONS]: '💬',
-    [SessionStatus.GENERATING_DRAFTS]: '🤖',
-    [SessionStatus.AWAITING_APPROVAL]: '👀',
-    [SessionStatus.APPROVED]: '✅',
-    [SessionStatus.PUBLISHING]: '🚀',
-  };
-
-  await ctx.reply(
-    `${statusEmoji[session.status]} Current Status: ${session.status}\n\n` +
-    `📁 Media uploaded: ${session.mediaAssets.length}\n` +
-    `📝 Drafts: ${session.draftPackages.length}\n` +
-    `🕒 Started: ${session.createdAt.toLocaleString()}`
-  );
 }
 
-async function getOrCreateBrandProfile(telegramId: string) {
-  return database.brandProfile.upsert({
-    where: { telegramId },
+async function getOrCreateUser(from: any) {
+  return database.user.upsert({
+    where: { telegramId: from.id.toString() },
     update: {},
     create: {
-      userId: telegramId,
-      telegramId,
-      defaultHashtags: [],
-      preferredPlatforms: ['YOUTUBE', 'FACEBOOK'],
-      autoPublish: false,
+      telegramId: from.id.toString(),
+      username: from.username,
+      firstName: from.first_name,
+      lastName: from.last_name,
     },
   });
+}
+
+async function getBrandProfile(userId: string) {
+  let profile = await database.brandProfile.findUnique({
+    where: { userId },
+  });
+
+  if (!profile) {
+    profile = await database.brandProfile.create({
+      data: {
+        userId,
+        defaultHashtags: [],
+        autoPublish: false,
+      },
+    });
+  }
+
+  return profile;
 }

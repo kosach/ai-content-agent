@@ -1,121 +1,95 @@
 import { Job } from 'bullmq';
 import { database } from '@ai-agent/database';
 import { storageService } from '@ai-agent/storage';
-import { aiService } from '@ai-agent/ai';
+import { contentAgent } from '@ai-agent/ai';
 import { logger } from '@ai-agent/observability';
+import { AnalyzeMediaJobData } from '@ai-agent/core';
 
 /**
  * Analyze Media Job
  * 
  * Responsibility: ONLY media analysis
- * - Download media from Telegram
- * - Upload to permanent storage (S3)
- * - Analyze content (AI vision/video understanding)
- * - Extract: topics, mood, objects, text, etc.
+ * 1. Download media from Telegram
+ * 2. Upload to permanent storage (S3)
+ * 3. Analyze content with AI (topics, mood, objects, title)
+ * 4. Update MediaAsset with results
  * 
  * Does NOT:
- * - Generate drafts (that's worker-generation)
- * - Publish (that's worker-publish)
- * - Ask questions (that's conversation agent in telegram-bot)
+ * - Generate drafts (worker-generation)
+ * - Ask questions (conversation agent in telegram-bot)
+ * - Publish (worker-publish)
  */
-export async function analyzeMediaJob(job: Job) {
-  const { sessionId, mediaType, telegramFileId } = job.data;
+export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
+  const { sessionId, mediaAssetId, mediaType, telegramFileId } = job.data;
 
-  logger.info({ sessionId, jobId: job.id }, 'Starting media analysis');
+  logger.info({ sessionId, mediaAssetId, jobId: job.id }, 'Starting media analysis');
 
   try {
-    // 1. Find the media asset
-    const mediaAsset = await database.mediaAsset.findFirst({
-      where: {
-        sessionId,
-        telegramFileId,
-      },
+    // 1. Get media asset from database
+    const mediaAsset = await database.mediaAsset.findUnique({
+      where: { id: mediaAssetId },
     });
 
     if (!mediaAsset) {
-      throw new Error('Media asset not found');
+      throw new Error(`Media asset not found: ${mediaAssetId}`);
     }
 
     // 2. Download from Telegram
-    // TODO: Implement Telegram file download
-    // const fileBuffer = await telegramService.downloadFile(telegramFileId);
+    // TODO: Implement Telegram Bot API file download
+    // const telegramBot = new TelegramBot(config.telegram.botToken);
+    // const fileBuffer = await telegramBot.downloadFile(telegramFileId);
     
-    // For now, mock the download
-    logger.info({ fileId: telegramFileId }, 'Downloading from Telegram (mock)');
+    logger.info({ telegramFileId }, 'Downloading from Telegram (TODO)');
 
-    // 3. Upload to permanent storage (S3)
-    // const storageUrl = await storageService.uploadMedia(
-    //   fileBuffer,
-    //   mediaAsset.filename,
-    //   mediaAsset.mimeType
-    // );
+    // 3. Upload to permanent storage
+    // TODO: Implement S3 upload
+    // const storageUrl = await storageService.uploadMedia({
+    //   buffer: fileBuffer,
+    //   filename: mediaAsset.filename,
+    //   mimeType: mediaAsset.mimeType,
+    // });
 
     // Mock storage URL for now
-    const storageUrl = `https://storage.example.com/media/${mediaAsset.id}`;
+    const storageUrl = `https://storage.example.com/media/${mediaAssetId}`;
 
-    // 4. Analyze content with AI
-    let analysisResult = {};
+    // 4. Analyze with AI (ContentAgent uses OpenClaw/Gemini)
+    logger.info({ mediaAssetId, mediaType }, 'Analyzing media with AI');
 
-    if (mediaType === 'VIDEO') {
-      // Video analysis: extract key frames, analyze content, detect topics
-      logger.info({ mediaId: mediaAsset.id }, 'Analyzing video content');
-      
-      // analysisResult = await aiService.analyzeVideo({
-      //   videoUrl: storageUrl,
-      //   extractTopics: true,
-      //   detectObjects: true,
-      //   transcribeAudio: true,
-      // });
+    const analysis = await contentAgent.analyzeMedia({
+      mediaType,
+      mediaUrl: storageUrl,
+      duration: mediaAsset.duration,
+    });
 
-      // Mock analysis for now
-      analysisResult = {
-        topics: ['technology', 'tutorial'],
-        mood: 'educational',
-        objects: ['person', 'laptop', 'screen'],
-        transcription: 'Sample video transcription...',
-        suggestedTitle: 'How to...',
-      };
-    } else {
-      // Photo analysis: analyze visual content, extract text if any
-      logger.info({ mediaId: mediaAsset.id }, 'Analyzing photo content');
+    logger.info({ mediaAssetId, analysis }, 'Analysis completed');
 
-      // analysisResult = await aiService.analyzeImage({
-      //   imageUrl: storageUrl,
-      //   extractText: true,
-      //   detectObjects: true,
-      // });
-
-      // Mock analysis for now
-      analysisResult = {
-        topics: ['product', 'showcase'],
-        mood: 'professional',
-        objects: ['product', 'background'],
-        extractedText: '',
-      };
-    }
-
-    logger.info({ mediaId: mediaAsset.id, result: analysisResult }, 'Analysis completed');
-
-    // 5. Update media asset with storage URL and analysis
+    // 5. Update media asset
     await database.mediaAsset.update({
-      where: { id: mediaAsset.id },
+      where: { id: mediaAssetId },
       data: {
         storageUrl,
         analyzed: true,
-        analysisResult,
+        analysisResult: analysis as any,
       },
     });
 
     return {
       success: true,
       data: {
-        mediaId: mediaAsset.id,
+        mediaAssetId,
         storageUrl,
-        analysis: analysisResult,
+        analysis,
       },
     };
   } catch (error) {
-    logger.error({ sessionId, error }, 'Media analysis failed');
+    logger.error({ sessionId, mediaAssetId, error }, 'Media analysis failed');
+
+    // Mark as failed
+    await database.mediaAsset.update({
+      where: { id: mediaAssetId },
+      data: { analyzed: false },
+    });
+
     throw error;
   }
 }

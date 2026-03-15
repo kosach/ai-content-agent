@@ -16,19 +16,69 @@ export enum MessageRole {
   SYSTEM = 'SYSTEM',
 }
 
+export enum MediaType {
+  PHOTO = 'PHOTO',
+  VIDEO = 'VIDEO',
+}
+
+export enum DraftStatus {
+  DRAFT = 'DRAFT',
+  APPROVED = 'APPROVED',
+  NEEDS_REVISION = 'NEEDS_REVISION',
+  PUBLISHED = 'PUBLISHED',
+  FAILED = 'FAILED',
+}
+
+export enum PublishJobStatus {
+  PENDING = 'PENDING',
+  UPLOADING = 'UPLOADING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  RETRYING = 'RETRYING',
+}
+
+export enum Platform {
+  YOUTUBE = 'YOUTUBE',
+  FACEBOOK = 'FACEBOOK',
+}
+
+// User
+export interface User {
+  id: string;
+  telegramId: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Brand Profile
+export interface BrandProfile {
+  id: string;
+  userId: string;
+  brandName?: string;
+  brandVoice?: string;
+  targetAudience?: string;
+  defaultHashtags: string[];
+  autoPublish: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Content Session
 export interface ContentSession {
   id: string;
   brandProfileId: string;
   status: SessionStatus;
   userIntent?: string;
-  targetPlatforms: Platform[];
-  targetAudience?: string;
   tone?: string;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
 }
 
+// Session Message
 export interface SessionMessage {
   id: string;
   sessionId: string;
@@ -38,12 +88,13 @@ export interface SessionMessage {
   createdAt: Date;
 }
 
+// Media Asset
 export interface MediaAsset {
   id: string;
   sessionId: string;
   type: MediaType;
-  telegramFileId?: string;
-  storageUrl: string;
+  telegramFileId: string;
+  storageUrl?: string;
   filename: string;
   mimeType: string;
   fileSize: number;
@@ -56,79 +107,63 @@ export interface MediaAsset {
   createdAt: Date;
 }
 
-export enum MediaType {
-  PHOTO = 'PHOTO',
-  VIDEO = 'VIDEO',
-}
-
+// Draft Package
 export interface DraftPackage {
   id: string;
   sessionId: string;
-  version: number;
-  status: DraftStatus;
   
   // YouTube Short
   youtubeTitle?: string;
   youtubeDescription?: string;
   youtubeHashtags: string[];
-  youtubeThumbnail?: string;
   
   // Facebook post
   facebookText?: string;
   facebookHashtags: string[];
   
-  // Media
-  videoUrl?: string;
-  imageUrls: string[];
+  // Media references
+  primaryVideoId?: string;
+  primaryImageId?: string;
   
-  // Publishing results
-  youtubePostId?: string;
-  youtubeUrl?: string;
-  facebookPostId?: string;
-  facebookUrl?: string;
+  // Versioning
+  version: number;
+  status: DraftStatus;
+  revisionRequest?: string;
   
-  publishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export enum DraftStatus {
-  DRAFT = 'DRAFT',
-  APPROVED = 'APPROVED',
-  REVISED = 'REVISED',
-  PUBLISHING = 'PUBLISHING',
-  PUBLISHED = 'PUBLISHED',
-  FAILED = 'FAILED',
-}
-
-export enum Platform {
-  YOUTUBE = 'YOUTUBE',
-  FACEBOOK = 'FACEBOOK',
-}
-
-export interface BrandProfile {
+// Publish Job
+export interface PublishJob {
   id: string;
-  userId: string;
-  telegramId: string;
-  brandName?: string;
-  brandVoice?: string;
-  targetAudience?: string;
-  defaultHashtags: string[];
-  preferredPlatforms: Platform[];
-  autoPublish: boolean;
+  sessionId: string;
+  draftPackageId: string;
+  platform: Platform;
+  status: PublishJobStatus;
+  
+  platformPostId?: string;
+  platformUrl?: string;
+  error?: string;
+  
+  attempts: number;
+  maxAttempts: number;
+  
   createdAt: Date;
   updatedAt: Date;
+  publishedAt?: Date;
 }
 
+// Connected Account
 export interface ConnectedAccount {
   id: string;
   brandProfileId: string;
   platform: Platform;
   platformUserId: string;
-  platformUsername?: string;
+  username?: string;
   accessToken: string;
   refreshToken?: string;
-  tokenExpiresAt?: Date;
+  expiresAt?: Date;
   isActive: boolean;
   lastVerified: Date;
   createdAt: Date;
