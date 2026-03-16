@@ -1,10 +1,15 @@
 import { Telegraf } from 'telegraf';
 import { config } from '@ai-agent/config';
 import { logger } from '@ai-agent/observability';
+import { geminiClient } from '@ai-agent/ai';
 import { registerHandlers } from './handlers';
 
 async function main() {
   logger.info('Starting Telegram bot...');
+
+  // Initialize Gemini client
+  geminiClient.initialize(config.ai.gemini.apiKey);
+  logger.info('Gemini client initialized');
 
   const bot = new Telegraf(config.telegram.botToken);
 

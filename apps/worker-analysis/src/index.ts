@@ -2,10 +2,15 @@ import { Worker } from 'bullmq';
 import { config } from '@ai-agent/config';
 import { logger } from '@ai-agent/observability';
 import { QUEUE_NAMES } from '@ai-agent/core';
+import { geminiClient } from '@ai-agent/ai';
 import { analyzeMediaJob } from './jobs/analyze-media';
 
 async function main() {
   logger.info('Starting media analysis worker...');
+
+  // Initialize Gemini client
+  geminiClient.initialize(config.ai.gemini.apiKey);
+  logger.info('Gemini client initialized');
 
   const worker = new Worker(
     QUEUE_NAMES.MEDIA_ANALYSIS,

@@ -1,6 +1,8 @@
 import { SessionStatus } from '@ai-agent/core';
 import { readPromptFile } from '../prompts/loader';
 import { MediaAnalysisSchema, DraftGenerationSchema } from '../schemas';
+import { geminiVisionProvider, geminiTextProvider } from '../providers';
+import { logger } from '@ai-agent/observability';
 
 /**
  * Content Agent - orchestrates the session lifecycle
@@ -123,21 +125,27 @@ export class ContentAgent {
     targetAudience: string;
     keyMoments?: Array<{ timestamp: string; description: string }>;
   }> {
-    const prompt = await readPromptFile('analysis/media-analyzer.prompt.md');
+    logger.info({ mediaType: params.mediaType }, 'Analyzing media with Gemini Vision');
 
-    // TODO: Call OpenClaw/Gemini with vision capabilities
-    // For now, return mock data
-    const analysis = {
-      topics: ['tutorial', 'product showcase'],
-      mood: 'professional',
-      objects: ['person', 'product', 'background'],
-      suggestedTitle: 'How to Get Started',
-      contentType: 'tutorial',
-      targetAudience: 'beginners',
-    };
+    // Load prompt template
+    const promptTemplate = await readPromptFile('analysis/media-analyzer.prompt.md');
 
-    // Validate against schema
-    MediaAnalysisSchema.parse(analysis);
+    // Render template with params
+    const prompt = this.renderTemplate(promptTemplate, {
+      mediaUrl: params.mediaUrl,
+      isVideo: params.mediaType === 'VIDEO',
+      duration: params.duration,
+    });
+
+    // Call Gemini Vision API
+    const analysis = await geminiVisionProvider.analyzeMedia({
+      mediaUrl: params.mediaUrl,
+      mediaType: params.mediaType,
+      duration: params.duration,
+      prompt,
+    });
+
+    logger.info({ analysis }, 'Media analysis completed with Gemini');
 
     return analysis;
   }
@@ -162,36 +170,49 @@ export class ContentAgent {
       hashtags: string[];
     };
   }> {
-    const prompt = await readPromptFile('generation/draft-generator.prompt.md');
+    logger.info(
+      { userIntent: params.userIntent, tone: params.tone },
+      'Generating drafts with Gemini'
+    );
 
-    // TODO: Call OpenClaw/Gemini with prompt template
-    // Template variables: mediaAnalysis, userIntent, tone, brandVoice
-    
-    const drafts = {
-      youtubeShort: {
-        title: '🚀 How to Get Started - Complete Tutorial',
-        description:
-          'Learn everything you need to know!\n\n' +
-          'In this video:\n' +
-          '✅ Step by step guide\n' +
-          '✅ Pro tips\n' +
-          '✅ Common mistakes to avoid\n\n' +
-          '#tutorial #howto #learn',
-        hashtags: ['tutorial', 'howto', 'learn', 'guide', 'tips'],
-      },
-      facebookPost: {
-        text:
-          '🚀 Want to learn how to get started?\n\n' +
-          'Check out this quick tutorial! Everything you need in 60 seconds.\n\n' +
-          'Watch now! 👇',
-        hashtags: ['tutorial', 'learning', 'tips'],
-      },
-    };
+    // Load prompt template
+    const promptTemplate = await readPromptFile('generation/draft-generator.prompt.md');
+
+    // Render template with context
+    const prompt = this.renderTemplate(promptTemplate, {
+      userIntent: params.userIntent,
+      tone: params.tone,
+      topics: params.mediaAnalysis.topics?.join(', ') || '',
+      mood: params.mediaAnalysis.mood || 'neutral',
+      contentType: params.mediaAnalysis.contentType || 'general',
+      targetAudience: params.mediaAnalysis.targetAudience || 'general',
+      brandVoice: params.brandVoice || 'authentic and engaging',
+      brandHashtags: params.brandHashtags?.join(', ') || '',
+    });
+
+    // Call Gemini Text API
+    const result = await geminiTextProvider.generateText({
+      prompt,
+      temperature: 0.8,
+      maxTokens: 2048,
+      responseFormat: 'json',
+    });
+
+    // Parse JSON response
+    let drafts: any;
+    try {
+      drafts = JSON.parse(result.text);
+    } catch (parseError) {
+      logger.error({ text: result.text, parseError }, 'Failed to parse draft generation response');
+      throw new Error('Failed to parse AI response');
+    }
 
     // Validate against schema
-    DraftGenerationSchema.parse(drafts);
+    const validated = DraftGenerationSchema.parse(drafts);
 
-    return drafts;
+    logger.info({ validated }, 'Draft generation completed');
+
+    return validated;
   }
 
   /**
@@ -204,12 +225,51 @@ export class ContentAgent {
   }): Promise<{
     revisedDraft: any;
   }> {
-    // TODO: Call OpenClaw/Gemini to revise draft based on feedback
-    
-    // For now, return current draft (no-op)
-    return {
-      revisedDraft: params.currentDraft,
-    };
+    logger.info({ revisionRequest: params.revisionRequest }, 'Processing revision request');
+
+    // Build revision prompt
+    const revisionPrompt = `You are revising social media content based on user feedback.
+
+Original Draft:
+${JSON.stringify(params.currentDraft, null, 2)}
+
+User Feedback:
+${params.revisionRequest}
+
+Original Context:
+- User Intent: ${params.originalContext.userIntent}
+- Tone: ${params.originalContext.tone}
+- Topics: ${params.originalContext.topics}
+
+Generate a REVISED version of the content that addresses the user's feedback while maintaining the original intent and platform requirements.
+
+Return ONLY valid JSON in the same format as the original draft:
+{
+  "youtubeShort": { "title": "...", "description": "...", "hashtags": [...] },
+  "facebookPost": { "text": "...", "hashtags": [...] }
+}`;
+
+    // Call Gemini Text API
+    const result = await geminiTextProvider.generateText({
+      prompt: revisionPrompt,
+      temperature: 0.8,
+      maxTokens: 2048,
+      responseFormat: 'json',
+    });
+
+    // Parse and validate
+    let revisedDraft: any;
+    try {
+      revisedDraft = JSON.parse(result.text);
+      DraftGenerationSchema.parse(revisedDraft);
+    } catch (parseError) {
+      logger.error({ text: result.text, parseError }, 'Failed to parse revision response');
+      throw new Error('Failed to parse AI response');
+    }
+
+    logger.info({ revisedDraft }, 'Revision completed');
+
+    return { revisedDraft };
   }
 
   /**
@@ -283,6 +343,29 @@ export class ContentAgent {
     };
 
     return messages[status] || '';
+  }
+
+  /**
+   * Simple template renderer
+   * Replaces {{variable}} with values from context
+   */
+  private renderTemplate(template: string, context: Record<string, any>): string {
+    let rendered = template;
+
+    // Handle simple conditionals: {{#if variable}}...{{/if}}
+    rendered = rendered.replace(
+      /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
+      (match, variable, content) => {
+        return context[variable] ? content : '';
+      }
+    );
+
+    // Handle variable substitution: {{variable}}
+    rendered = rendered.replace(/\{\{(\w+)\}\}/g, (match, variable) => {
+      return context[variable] !== undefined ? String(context[variable]) : '';
+    });
+
+    return rendered;
   }
 }
 
