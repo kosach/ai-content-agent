@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ai-agent/core": "workspace:*",
+    "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
     "bullmq": "^5.36.3",
     "ioredis": "^5.4.2"
