@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ai-agent/core": "workspace:*",
+    "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
     "@aws-sdk/client-s3": "^3.737.0",
     "@aws-sdk/s3-request-presigner": "^3.737.0"

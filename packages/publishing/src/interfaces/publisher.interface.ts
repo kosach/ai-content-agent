@@ -1,5 +1,8 @@
 import { PublishRequest, PublishResult, TokenRefreshResult } from '../types/publish-result';
 
+// Re-export types for convenience
+export { PublishRequest, PublishResult, TokenRefreshResult };
+
 /**
  * Publisher Interface
  * 

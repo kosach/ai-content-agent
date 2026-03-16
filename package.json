@@ -5,17 +5,17 @@
   "description": "AI Content Agent - Production-ready monorepo",
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
+    "build:force": "tsc -b tsconfig.build.json --force",
     "build:clean": "tsc -b tsconfig.build.json --clean && tsc -b tsconfig.build.json",
-    "type-check": "tsc -b tsconfig.build.json --noEmit",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
     "test": "turbo run test",
     "clean": "tsc -b tsconfig.build.json --clean && rm -rf node_modules",
-    "db:generate": "cd packages/database && prisma generate",
-    "db:push": "cd packages/database && prisma db push",
-    "db:migrate": "cd packages/database && prisma migrate dev"
+    "db:generate": "cd packages/database && npx prisma generate",
+    "db:push": "cd packages/database && npx prisma db push",
+    "db:migrate": "cd packages/database && npx prisma migrate dev"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

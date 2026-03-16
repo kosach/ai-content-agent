@@ -303,7 +303,7 @@ export class ContentAgent {
   private parseTone(message: string): string {
     const lower = message.toLowerCase();
 
-    const toneMap: Record<string, string> = {
+    const toneMap: Record<string, string[]> = {
       professional: ['professional', 'formal', 'business'],
       casual: ['casual', 'friendly', 'relaxed'],
       funny: ['funny', 'humor', 'entertaining'],
@@ -312,7 +312,7 @@ export class ContentAgent {
     };
 
     for (const [tone, keywords] of Object.entries(toneMap)) {
-      if (keywords.some((kw) => lower.includes(kw))) {
+      if (keywords.some((kw: string) => lower.includes(kw))) {
         return tone;
       }
     }

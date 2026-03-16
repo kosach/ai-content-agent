@@ -210,7 +210,7 @@ async function handleMediaUpload(
 
     const agentResponse = await contentAgent.getNextQuestion({
       sessionId: session.id,
-      status: session.status,
+      status: session.status as any,
       mediaCount,
       hasUserIntent: !!session.userIntent,
       hasTone: !!session.tone,

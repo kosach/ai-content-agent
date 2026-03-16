@@ -79,9 +79,9 @@ export async function publishYouTubeJob(job: Job<PublishYouTubeJobData>) {
 
     // 7. Publish to YouTube
     const publisher = new YouTubePublisher(
-      config.youtube.clientId,
-      config.youtube.clientSecret,
-      config.youtube.redirectUri
+      config.youtube.clientId!,
+      config.youtube.clientSecret!,
+      config.youtube.redirectUri!
     );
 
     logger.info({ videoId: mediaAsset.id, title: draftPackage.youtubeTitle }, 'Publishing to YouTube');
@@ -92,12 +92,12 @@ export async function publishYouTubeJob(job: Job<PublishYouTubeJobData>) {
           buffer: videoBuffer,
           mimeType: mediaAsset.mimeType,
           filename: mediaAsset.filename,
-          duration: mediaAsset.duration,
+          duration: mediaAsset.duration || undefined,
         },
         content: {
-          title: draftPackage.youtubeTitle,
-          description: draftPackage.youtubeDescription,
-          hashtags: draftPackage.youtubeHashtags,
+          title: draftPackage.youtubeTitle || undefined,
+          description: draftPackage.youtubeDescription || undefined,
+          hashtags: draftPackage.youtubeHashtags || undefined,
         },
         options: {
           privacy: 'public',
@@ -175,12 +175,12 @@ async function getValidAccessToken(connectedAccount: any): Promise<string> {
 
     // Refresh token using publisher
     const publisher = new YouTubePublisher(
-      config.youtube.clientId,
-      config.youtube.clientSecret,
-      config.youtube.redirectUri
+      config.youtube.clientId!,
+      config.youtube.clientSecret!,
+      config.youtube.redirectUri!
     );
 
-    const refreshResult = await publisher.refreshAccessToken(connectedAccount.refreshToken);
+    const refreshResult = await publisher.refreshAccessToken(connectedAccount.refreshToken!);
 
     // Update database
     await database.connectedAccount.update({
@@ -257,8 +257,8 @@ async function checkCompletionAndNotify(sessionId: string, telegramChatId: strin
 
     await telegramNotification.sendPublishConfirmation({
       chatId: telegramChatId,
-      youtubeUrl,
-      facebookUrl,
+      youtubeUrl: youtubeUrl || undefined,
+      facebookUrl: facebookUrl || undefined,
     });
 
     logger.info({ sessionId }, 'All publish jobs completed, session marked as PUBLISHED');

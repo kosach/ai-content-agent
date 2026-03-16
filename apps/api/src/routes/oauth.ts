@@ -127,19 +127,19 @@ export async function oauthRoutes(fastify: FastifyInstance) {
         },
         update: {
           accessToken: tokens.access_token!,
-          refreshToken: tokens.refresh_token || undefined,
+          refreshToken: tokens.refresh_token || null,
           expiresAt,
-          platformUserId: channel.id || undefined,
-          platformUserName: channel.snippet?.title || undefined,
+          platformUserId: channel.id!,
+          platformUserName: channel.snippet?.title || null,
         },
         create: {
           brandProfileId: user.brandProfile.id,
           platform: 'YOUTUBE',
           accessToken: tokens.access_token!,
-          refreshToken: tokens.refresh_token || undefined,
+          refreshToken: tokens.refresh_token || null,
           expiresAt,
-          platformUserId: channel.id || undefined,
-          platformUserName: channel.snippet?.title || undefined,
+          platformUserId: channel.id!,
+          platformUserName: channel.snippet?.title || null,
         },
       });
 

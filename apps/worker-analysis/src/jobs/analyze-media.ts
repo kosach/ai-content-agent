@@ -72,7 +72,7 @@ export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
     const analysis = await contentAgent.analyzeMedia({
       mediaType,
       mediaUrl: storageUrl,
-      duration: mediaAsset.duration,
+      duration: mediaAsset.duration || undefined,
     });
 
     logger.info({ mediaAssetId, analysis }, 'Analysis completed');

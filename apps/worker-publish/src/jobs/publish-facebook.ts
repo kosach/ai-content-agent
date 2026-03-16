@@ -70,9 +70,9 @@ export async function publishFacebookJob(job: Job<PublishFacebookJobData>) {
 
     // Publish to Facebook
     const publisher = new FacebookPublisher(
-      config.facebook.appId,
-      config.facebook.appSecret,
-      config.facebook.redirectUri
+      config.facebook.appId!,
+      config.facebook.appSecret!,
+      config.facebook.redirectUri!
     );
 
     logger.info({ videoId: mediaAsset.id }, 'Publishing to Facebook');
@@ -83,10 +83,10 @@ export async function publishFacebookJob(job: Job<PublishFacebookJobData>) {
           buffer: videoBuffer,
           mimeType: mediaAsset.mimeType,
           filename: mediaAsset.filename,
-          duration: mediaAsset.duration,
+          duration: mediaAsset.duration || undefined,
         },
         content: {
-          description: draftPackage.facebookText,
+          description: draftPackage.facebookText || undefined,
           hashtags: draftPackage.facebookHashtags,
         },
         idempotencyKey: publishJobId,
@@ -140,12 +140,12 @@ async function getValidAccessToken(connectedAccount: any): Promise<string> {
   const now = new Date();
   if (connectedAccount.expiresAt && connectedAccount.expiresAt < now) {
     const publisher = new FacebookPublisher(
-      config.facebook.appId,
-      config.facebook.appSecret,
-      config.facebook.redirectUri
+      config.facebook.appId!,
+      config.facebook.appSecret!,
+      config.facebook.redirectUri!
     );
 
-    const refreshResult = await publisher.refreshAccessToken(connectedAccount.refreshToken);
+    const refreshResult = await publisher.refreshAccessToken(connectedAccount.refreshToken!);
 
     await database.connectedAccount.update({
       where: { id: connectedAccount.id },
@@ -185,8 +185,8 @@ async function checkCompletionAndNotify(sessionId: string, telegramChatId: strin
 
     await telegramNotification.sendPublishConfirmation({
       chatId: telegramChatId,
-      youtubeUrl: completed.find((j) => j.platform === 'YOUTUBE')?.platformUrl,
-      facebookUrl: completed.find((j) => j.platform === 'FACEBOOK')?.platformUrl,
+      youtubeUrl: completed.find((j) => j.platform === 'YOUTUBE')?.platformUrl || undefined,
+      facebookUrl: completed.find((j) => j.platform === 'FACEBOOK')?.platformUrl || undefined,
     });
   } else if (completed.length > 0 && failed.length > 0) {
     await database.contentSession.update({
