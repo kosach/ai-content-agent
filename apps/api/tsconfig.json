@@ -9,10 +9,7 @@
     { "path": "../../packages/core" },
     { "path": "../../packages/config" },
     { "path": "../../packages/database" },
-    { "path": "../../packages/storage" },
     { "path": "../../packages/media" },
-    { "path": "../../packages/queue" },
-    { "path": "../../packages/ai" },
     { "path": "../../packages/observability" }
   ]
 }

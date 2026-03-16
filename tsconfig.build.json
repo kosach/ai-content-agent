@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/observability" },
+    { "path": "./packages/config" },
+    { "path": "./packages/database" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/media" },
+    { "path": "./packages/queue" },
+    { "path": "./packages/ai" },
+    { "path": "./packages/publishing" },
+    { "path": "./apps/api" },
+    { "path": "./apps/telegram-bot" },
+    { "path": "./apps/worker-analysis" },
+    { "path": "./apps/worker-generation" },
+    { "path": "./apps/worker-publish" }
+  ]
+}
