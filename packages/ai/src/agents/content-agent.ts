@@ -227,31 +227,26 @@ export class ContentAgent {
   }> {
     logger.info({ revisionRequest: params.revisionRequest }, 'Processing revision request');
 
-    // Build revision prompt
-    const revisionPrompt = `You are revising social media content based on user feedback.
+    // Load prompt template
+    const promptTemplate = await readPromptFile('revision/revise-drafts.prompt.md');
 
-Original Draft:
-${JSON.stringify(params.currentDraft, null, 2)}
-
-User Feedback:
-${params.revisionRequest}
-
-Original Context:
-- User Intent: ${params.originalContext.userIntent}
-- Tone: ${params.originalContext.tone}
-- Topics: ${params.originalContext.topics}
-
-Generate a REVISED version of the content that addresses the user's feedback while maintaining the original intent and platform requirements.
-
-Return ONLY valid JSON in the same format as the original draft:
-{
-  "youtubeShort": { "title": "...", "description": "...", "hashtags": [...] },
-  "facebookPost": { "text": "...", "hashtags": [...] }
-}`;
+    // Render template with context
+    const prompt = this.renderTemplate(promptTemplate, {
+      originalYoutubeTitle: params.currentDraft.youtubeShort.title,
+      originalYoutubeDescription: params.currentDraft.youtubeShort.description,
+      originalYoutubeHashtags: params.currentDraft.youtubeShort.hashtags.join(', '),
+      originalFacebookText: params.currentDraft.facebookPost.text,
+      originalFacebookHashtags: params.currentDraft.facebookPost.hashtags.join(', '),
+      userFeedback: params.revisionRequest,
+      userIntent: params.originalContext.userIntent || '',
+      tone: params.originalContext.tone || '',
+      topics: params.originalContext.topics || '',
+      targetAudience: params.originalContext.targetAudience || '',
+    });
 
     // Call Gemini Text API
     const result = await geminiTextProvider.generateText({
-      prompt: revisionPrompt,
+      prompt,
       temperature: 0.8,
       maxTokens: 2048,
       responseFormat: 'json',
