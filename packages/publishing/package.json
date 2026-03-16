@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@ai-agent/core": "workspace:*",
+    "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
-    "twitter-api-v2": "^1.17.4",
-    "instagram-private-api": "^1.47.0"
+    "googleapis": "^144.0.0",
+    "axios": "^1.7.2",
+    "form-data": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
