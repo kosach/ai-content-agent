@@ -17,9 +17,11 @@
     "@ai-agent/queue": "workspace:*",
     "@ai-agent/storage": "workspace:*",
     "@ai-agent/publishing": "workspace:*",
+    "@ai-agent/media": "workspace:*",
     "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
     "@ai-agent/utils": "workspace:*",
+    "bullmq": "^5.36.3",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {

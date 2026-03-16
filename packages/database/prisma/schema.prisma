@@ -202,7 +202,12 @@ model PublishJob {
   // Publishing result
   platformPostId String?  // YouTube video ID or Facebook post ID
   platformUrl    String?  // Full URL to published content
-  error          String?  @db.Text
+  
+  // Error tracking (detailed for retry logic)
+  errorMessage   String?  @db.Text
+  errorType      String?  // AUTH_INVALID, QUOTA_EXCEEDED, etc.
+  errorStack     String?  @db.Text
+  retryAfter     DateTime?
   
   attempts       Int      @default(0)
   maxAttempts    Int      @default(3)
@@ -236,9 +241,9 @@ model ConnectedAccount {
   brandProfileId String
   brandProfile   BrandProfile @relation(fields: [brandProfileId], references: [id])
   
-  platform       Platform
-  platformUserId String   // user's ID on the platform
-  username       String?  // @username or page name
+  platform         Platform
+  platformUserId   String   // user's ID on the platform
+  platformUserName String?  // @username or page name (channel/page title)
   
   // OAuth credentials
   accessToken    String   @db.Text
