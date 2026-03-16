@@ -68,6 +68,7 @@ const ConfigSchema = z.object({
   api: z.object({
     port: z.coerce.number().default(3000),
     host: z.string().default('0.0.0.0'),
+    baseUrl: z.string().default('http://localhost:3000'),
   }),
 
   // Workers
@@ -133,6 +134,7 @@ function loadConfig(): Config {
     api: {
       port: process.env.API_PORT,
       host: process.env.API_HOST,
+      baseUrl: process.env.API_BASE_URL,
     },
     worker: {
       concurrency: process.env.WORKER_CONCURRENCY,

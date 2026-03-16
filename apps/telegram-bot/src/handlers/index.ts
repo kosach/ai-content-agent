@@ -14,6 +14,7 @@ import {
 import { logger } from '@ai-agent/observability';
 
 import { handleCallbackQuery } from './callback';
+import { handleConnectYouTube, handleConnectFacebook, handleAccounts, handleDisconnect } from './connect';
 
 /**
  * Telegram Bot Handlers - MVP Flow
@@ -30,10 +31,18 @@ import { handleCallbackQuery } from './callback';
  * THIN HANDLERS - no business logic, only orchestration!
  */
 export function registerHandlers(bot: Telegraf) {
+  // Core commands
   bot.command('start', handleStart);
   bot.command('cancel', handleCancel);
   bot.command('status', handleStatus);
+
+  // OAuth commands
+  bot.command('connect_youtube', handleConnectYouTube);
+  bot.command('connect_facebook', handleConnectFacebook);
+  bot.command('accounts', handleAccounts);
+  bot.command('disconnect', handleDisconnect);
   
+  // Media handlers
   bot.on('photo', handlePhoto);
   bot.on('video', handleVideo);
   bot.on('text', handleText);
