@@ -1,6 +1,7 @@
 import { Job } from 'bullmq';
 import { database } from '@ai-agent/database';
-import { storageService } from '@ai-agent/storage';
+import { s3Storage } from '@ai-agent/storage';
+import { telegramFile } from '@ai-agent/media';
 import { contentAgent } from '@ai-agent/ai';
 import { logger } from '@ai-agent/observability';
 import { AnalyzeMediaJobData } from '@ai-agent/core';
@@ -35,22 +36,35 @@ export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
     }
 
     // 2. Download from Telegram
-    // TODO: Implement Telegram Bot API file download
-    // const telegramBot = new TelegramBot(config.telegram.botToken);
-    // const fileBuffer = await telegramBot.downloadFile(telegramFileId);
+    logger.info({ telegramFileId }, 'Downloading from Telegram');
     
-    logger.info({ telegramFileId }, 'Downloading from Telegram (TODO)');
+    const { buffer, size } = await telegramFile.downloadWithMetadata(telegramFileId);
+    
+    logger.info({ telegramFileId, downloadedSize: size }, 'Downloaded from Telegram');
 
-    // 3. Upload to permanent storage
-    // TODO: Implement S3 upload
-    // const storageUrl = await storageService.uploadMedia({
-    //   buffer: fileBuffer,
-    //   filename: mediaAsset.filename,
-    //   mimeType: mediaAsset.mimeType,
-    // });
+    // 3. Upload to permanent storage (S3)
+    const fileExtension = mediaAsset.filename.split('.').pop() || (mediaType === 'VIDEO' ? 'mp4' : 'jpg');
+    
+    const s3Key = s3Storage.buildMediaKey({
+      sessionId,
+      assetId: mediaAssetId,
+      extension: fileExtension,
+    });
 
-    // Mock storage URL for now
-    const storageUrl = `https://storage.example.com/media/${mediaAssetId}`;
+    logger.info({ s3Key, size }, 'Uploading to S3');
+
+    const storageUrl = await s3Storage.uploadMedia({
+      buffer,
+      key: s3Key,
+      contentType: mediaAsset.mimeType,
+      metadata: {
+        sessionId,
+        mediaAssetId,
+        telegramFileId,
+      },
+    });
+
+    logger.info({ storageUrl }, 'Uploaded to S3 successfully');
 
     // 4. Analyze with AI (ContentAgent uses OpenClaw/Gemini)
     logger.info({ mediaAssetId, mediaType }, 'Analyzing media with AI');

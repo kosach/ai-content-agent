@@ -24,10 +24,10 @@ const ConfigSchema = z.object({
 
   // S3 Storage
   s3: z.object({
-    endpoint: z.string().url().optional(),
-    bucket: z.string(),
-    accessKey: z.string(),
-    secretKey: z.string(),
+    endpoint: z.string().optional(), // Optional for AWS S3, required for MinIO
+    bucket: z.string().min(1, 'S3 bucket name is required'),
+    accessKey: z.string().min(1, 'S3 access key is required'),
+    secretKey: z.string().min(1, 'S3 secret key is required'),
     region: z.string().default('us-east-1'),
   }),
 
