@@ -21,7 +21,7 @@
     "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
     "@ai-agent/utils": "workspace:*",
-    "telegraf": "^4.17.0",
+    "telegraf": "^4.16.3",
     "axios": "^1.7.2",
     "dotenv": "^16.4.7"
   },

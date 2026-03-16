@@ -15,7 +15,7 @@
     "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
     "sharp": "^0.33.5",
-    "file-type": "^19.8.0",
+    "file-type": "^19.0.0",
     "axios": "^1.7.2"
   },
   "devDependencies": {
