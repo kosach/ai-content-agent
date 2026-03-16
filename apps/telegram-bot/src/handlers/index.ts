@@ -13,6 +13,8 @@ import {
 } from '@ai-agent/core';
 import { logger } from '@ai-agent/observability';
 
+import { handleCallbackQuery } from './callback';
+
 /**
  * Telegram Bot Handlers - MVP Flow
  * 
@@ -23,7 +25,7 @@ import { logger } from '@ai-agent/observability';
  * 4. Agent asks clarifying questions
  * 5. User answers → handleText → extract context
  * 6. When ready → Enqueue GENERATE_DRAFTS
- * 7. Present drafts → handleText (approval) → Enqueue PUBLISH jobs
+ * 7. Present drafts → callback handler (approval) → Enqueue PUBLISH jobs
  * 
  * THIN HANDLERS - no business logic, only orchestration!
  */
@@ -35,6 +37,7 @@ export function registerHandlers(bot: Telegraf) {
   bot.on('photo', handlePhoto);
   bot.on('video', handleVideo);
   bot.on('text', handleText);
+  bot.on('callback_query', handleCallbackQuery);
 }
 
 async function handleStart(ctx: Context) {
@@ -266,7 +269,17 @@ async function handleText(ctx: Context) {
 
     // Route based on session status
     if (session.status === SessionStatus.AWAITING_APPROVAL) {
-      await handleApproval(ctx, session, text);
+      // Check if draft is in revision mode
+      const draftPackage = await database.draftPackage.findFirst({
+        where: { sessionId: session.id },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (draftPackage?.status === 'NEEDS_REVISION') {
+        await handleRevisionRequest(ctx, session, draftPackage, text);
+      } else {
+        await handleApproval(ctx, session, text);
+      }
     } else {
       await handleConversation(ctx, session, text);
     }
@@ -357,17 +370,10 @@ async function handleApproval(ctx: Context, session: any, text: string) {
   const result = await contentAgent.handleApproval(text);
 
   if (result.approved) {
-    await database.contentSession.update({
-      where: { id: session.id },
-      data: { status: SessionStatus.APPROVED },
-    });
-
-    await ctx.reply('✅ Great! Publishing to YouTube and Facebook...');
-
-    // TODO: Enqueue PUBLISH_YOUTUBE and PUBLISH_FACEBOOK jobs
-    // Need to get draft package and connected accounts first
-    
-    logger.info({ sessionId: session.id }, 'Drafts approved, publishing');
+    await ctx.reply(
+      '⚠️ Please use the inline buttons above to approve drafts.\n\n' +
+      'Click ✅ Approve button to publish.'
+    );
   } else {
     await ctx.reply(
       'Got it! What would you like me to change?\n\n' +
@@ -389,6 +395,87 @@ async function handleApproval(ctx: Context, session: any, text: string) {
         },
       });
     }
+  }
+}
+
+async function handleRevisionRequest(ctx: Context, session: any, draftPackage: any, text: string) {
+  logger.info({ sessionId: session.id, draftPackageId: draftPackage.id }, 'Processing revision request');
+
+  try {
+    await ctx.reply('🤖 Revising your drafts based on your feedback...');
+
+    // Get original context
+    const mediaAsset = await database.mediaAsset.findFirst({
+      where: { sessionId: session.id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const originalContext = {
+      userIntent: session.userIntent,
+      tone: session.tone,
+      topics: (mediaAsset?.analysisResult as any)?.topics?.join(', ') || '',
+      targetAudience: (mediaAsset?.analysisResult as any)?.targetAudience || '',
+    };
+
+    // Call contentAgent.processRevision
+    const currentDraft = {
+      youtubeShort: {
+        title: draftPackage.youtubeTitle,
+        description: draftPackage.youtubeDescription,
+        hashtags: draftPackage.youtubeHashtags,
+      },
+      facebookPost: {
+        text: draftPackage.facebookText,
+        hashtags: draftPackage.facebookHashtags,
+      },
+    };
+
+    const { revisedDraft } = await contentAgent.processRevision({
+      currentDraft,
+      revisionRequest: text,
+      originalContext,
+    });
+
+    // Create new DraftPackage with incremented version
+    const newDraftPackage = await database.draftPackage.create({
+      data: {
+        sessionId: session.id,
+        youtubeTitle: revisedDraft.youtubeShort.title,
+        youtubeDescription: revisedDraft.youtubeShort.description,
+        youtubeHashtags: revisedDraft.youtubeShort.hashtags,
+        facebookText: revisedDraft.facebookPost.text,
+        facebookHashtags: revisedDraft.facebookPost.hashtags,
+        status: 'DRAFT',
+        version: draftPackage.version + 1,
+        revisionRequest: text,
+      },
+    });
+
+    logger.info({ newDraftPackageId: newDraftPackage.id, version: newDraftPackage.version }, 'Revised draft created');
+
+    // Send new preview (import from media package if needed, or inline)
+    const { telegramNotification } = await import('@ai-agent/media');
+    
+    await telegramNotification.sendDraftPreview({
+      chatId: ctx.from!.id.toString(),
+      sessionId: session.id,
+      draftPackageId: newDraftPackage.id,
+      youtubeShort: {
+        title: revisedDraft.youtubeShort.title,
+        description: revisedDraft.youtubeShort.description,
+        hashtags: revisedDraft.youtubeShort.hashtags,
+      },
+      facebookPost: {
+        text: revisedDraft.facebookPost.text,
+        hashtags: revisedDraft.facebookPost.hashtags,
+      },
+    });
+
+  } catch (error) {
+    logger.error({ error, sessionId: session.id }, 'Failed to process revision');
+    await ctx.reply(
+      '⚠️ Failed to revise drafts. Please try again or click ❌ Cancel to start over.'
+    );
   }
 }
 
