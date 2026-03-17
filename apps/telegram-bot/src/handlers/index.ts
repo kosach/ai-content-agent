@@ -17,6 +17,12 @@ import { handleCallbackQuery } from './callback';
 import { handleConnectYouTube, handleConnectFacebook, handleAccounts, handleDisconnect } from './connect';
 import { tc, getUserLanguage } from '../i18n';
 import { handleGeneralMessage, isKnownCommand } from '../conversational-ai';
+import { 
+  getOrCreateActiveSession, 
+  scheduleIntentQuestion, 
+  clearSessionTracking,
+  getMediaGroupId 
+} from '../session-manager';
 
 /**
  * Telegram Bot Handlers - MVP Flow
@@ -98,12 +104,15 @@ async function handlePhoto(ctx: Context) {
   if (!ctx.from || !ctx.message || !('photo' in ctx.message)) return;
 
   const photo = ctx.message.photo[ctx.message.photo.length - 1];
+  const mediaGroupId = getMediaGroupId(ctx);
+  
   await handleMediaUpload(ctx, {
     type: MediaType.PHOTO,
     fileId: photo.file_id,
     fileSize: photo.file_size || 0,
     width: photo.width,
     height: photo.height,
+    mediaGroupId,
   });
 }
 
@@ -111,6 +120,8 @@ async function handleVideo(ctx: Context) {
   if (!ctx.from || !ctx.message || !('video' in ctx.message)) return;
 
   const video = ctx.message.video;
+  const mediaGroupId = getMediaGroupId(ctx);
+  
   await handleMediaUpload(ctx, {
     type: MediaType.VIDEO,
     fileId: video.file_id,
@@ -119,6 +130,7 @@ async function handleVideo(ctx: Context) {
     height: video.height,
     duration: video.duration,
     thumbnail: video.thumbnail?.file_id,
+    mediaGroupId,
   });
 }
 
@@ -132,6 +144,7 @@ async function handleMediaUpload(
     height?: number;
     duration?: number;
     thumbnail?: string;
+    mediaGroupId?: string;
   }
 ) {
   if (!ctx.from) return;
@@ -140,26 +153,11 @@ async function handleMediaUpload(
     const user = await getOrCreateUser(ctx.from);
     const brandProfile = await getBrandProfile(user.id);
 
-    // Get or create active session
-    let session = await database.contentSession.findFirst({
-      where: {
-        brandProfileId: brandProfile.id,
-        status: {
-          in: [SessionStatus.COLLECTING_MEDIA, SessionStatus.ASKING_QUESTIONS],
-        },
-      },
-    });
+    // Use session manager to get or create active session
+    // This prevents creating duplicate sessions for consecutive media
+    const session = await getOrCreateActiveSession(brandProfile.id);
 
-    if (!session) {
-      session = await database.contentSession.create({
-        data: {
-          brandProfileId: brandProfile.id,
-          status: SessionStatus.COLLECTING_MEDIA,
-        },
-      });
-    }
-
-    // Save media asset
+    // Save media asset (mediaGroupId tracked in SessionMessage metadata)
     const mediaAsset = await database.mediaAsset.create({
       data: {
         sessionId: session.id,
@@ -184,11 +182,12 @@ async function handleMediaUpload(
         metadata: { 
           fileId: media.fileId,
           telegramMessageId: ctx.message?.message_id,
+          mediaGroupId: media.mediaGroupId,
         },
       },
     });
 
-    // Enqueue ANALYZE_MEDIA job with proper payload
+    // Enqueue ANALYZE_MEDIA job
     const jobData: AnalyzeMediaJobData = {
       sessionId: session.id,
       brandProfileId: brandProfile.id,
@@ -199,39 +198,57 @@ async function handleMediaUpload(
 
     await queueService.enqueue(JobType.ANALYZE_MEDIA, jobData);
 
-    // Update session status
-    await database.contentSession.update({
-      where: { id: session.id },
-      data: { status: SessionStatus.ASKING_QUESTIONS },
-    });
-
-    // Get appropriate question based on session state
-    let questionKey: string;
-    const hasUserIntent = !!session.userIntent;
-    const hasTone = !!session.tone;
-    
-    if (!hasUserIntent) {
-      questionKey = 'question.mediaReceived';
-    } else if (!hasTone) {
-      questionKey = 'question.toneOptions';
-    } else {
-      questionKey = 'question.readyToGenerate';
+    // Update session status to ASKING_QUESTIONS (if not already)
+    if (session.status === SessionStatus.COLLECTING_MEDIA) {
+      await database.contentSession.update({
+        where: { id: session.id },
+        data: { status: SessionStatus.ASKING_QUESTIONS },
+      });
     }
-    
-    const message = tc(ctx, questionKey as any);
 
-    // Save agent response
-    await database.sessionMessage.create({
-      data: {
-        sessionId: session.id,
-        role: MessageRole.AGENT,
-        content: message,
-      },
+    // Schedule intent question with debounce
+    // This prevents duplicate messages when user sends multiple videos
+    scheduleIntentQuestion(session.id, async () => {
+      // Re-fetch session to get latest state
+      const updatedSession = await database.contentSession.findUnique({
+        where: { id: session.id },
+      });
+
+      if (!updatedSession) return;
+
+      // Get appropriate question based on session state
+      let questionKey: string;
+      const hasUserIntent = !!updatedSession.userIntent;
+      const hasTone = !!updatedSession.tone;
+      
+      if (!hasUserIntent) {
+        questionKey = 'question.mediaReceived';
+      } else if (!hasTone) {
+        questionKey = 'question.toneOptions';
+      } else {
+        questionKey = 'question.readyToGenerate';
+      }
+      
+      const message = tc(ctx, questionKey as any);
+
+      // Save agent response
+      await database.sessionMessage.create({
+        data: {
+          sessionId: session.id,
+          role: MessageRole.AGENT,
+          content: message,
+        },
+      });
+
+      await ctx.reply(message);
+      logger.info({ sessionId: session.id }, 'Intent question sent after debounce');
     });
 
-    await ctx.reply(message);
-
-    logger.info({ sessionId: session.id, mediaType: media.type }, 'Media uploaded');
+    logger.info({ 
+      sessionId: session.id, 
+      mediaType: media.type,
+      mediaGroupId: media.mediaGroupId,
+    }, 'Media uploaded and question scheduled');
   } catch (error) {
     logger.error({ error }, 'Failed to handle media upload');
     await ctx.reply(tc(ctx, 'error.generic'));
@@ -516,6 +533,9 @@ async function handleCancel(ctx: Context) {
     });
 
     if (session) {
+      // Clear pending question sends
+      clearSessionTracking(session.id);
+      
       await database.contentSession.update({
         where: { id: session.id },
         data: { status: SessionStatus.CANCELLED },
