@@ -15,7 +15,8 @@ import { logger } from '@ai-agent/observability';
 
 import { handleCallbackQuery } from './callback';
 import { handleConnectYouTube, handleConnectFacebook, handleAccounts, handleDisconnect } from './connect';
-import { tc } from '../i18n';
+import { tc, getUserLanguage } from '../i18n';
+import { handleGeneralMessage, isKnownCommand } from '../conversational-ai';
 
 /**
  * Telegram Bot Handlers - MVP Flow
@@ -241,6 +242,11 @@ async function handleText(ctx: Context) {
 
   const text = ctx.message.text;
 
+  // Skip commands - they're handled separately
+  if (isKnownCommand(text)) {
+    return;
+  }
+
   try {
     const user = await getOrCreateUser(ctx.from);
     const brandProfile = await getBrandProfile(user.id);
@@ -262,8 +268,11 @@ async function handleText(ctx: Context) {
       },
     });
 
+    // If no active session, use conversational AI
     if (!session) {
-      await ctx.reply('No active session. Upload a photo or video to start!');
+      const lang = getUserLanguage(ctx);
+      const response = await handleGeneralMessage(text, lang);
+      await ctx.reply(response);
       return;
     }
 
@@ -510,14 +519,14 @@ async function handleCancel(ctx: Context) {
         where: { id: session.id },
         data: { status: SessionStatus.CANCELLED },
       });
-
-      await ctx.reply('✅ Session cancelled. Upload new media to start again!');
-    } else {
-      await ctx.reply('No active session to cancel.');
+      logger.info({ sessionId: session.id }, 'Session cancelled by user');
     }
+
+    // Always respond friendly, whether there was a session or not
+    await ctx.reply(tc(ctx, 'session.cancelled'));
   } catch (error) {
     logger.error({ error }, 'Failed to cancel session');
-    await ctx.reply('Failed to cancel session.');
+    await ctx.reply(tc(ctx, 'error.generic'));
   }
 }
 

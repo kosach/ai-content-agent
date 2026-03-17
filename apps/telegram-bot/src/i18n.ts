@@ -7,16 +7,15 @@
 export const translations = {
   en: {
     // Welcome & Commands
-    'welcome.title': '👋 Welcome to AI Content Agent!',
-    'welcome.description': 'I help you create YouTube Shorts and Facebook posts from your videos and photos.',
-    'welcome.cta': '📹 Upload a video or 📸 photo to start!',
-    'welcome.commands': 'Commands:',
-    'command.cancel': '/cancel - Cancel current session',
-    'command.status': '/status - Check session status',
+    'welcome.title': '👋 Hey there!',
+    'welcome.description': 'I help you create awesome YouTube Shorts and Facebook posts from your videos and photos. Just upload something and I\'ll handle the rest! ✨',
+    'welcome.cta': '📹 Upload a video or 📸 photo to get started!',
+    'welcome.commands': 'Quick commands:',
+    'command.cancel': '/cancel - Start over',
+    'command.status': '/status - What\'s happening',
     
     // Session
-    'session.noActive': 'No active session. Upload a photo or video to start!',
-    'session.cancelled': '❌ Session cancelled.',
+    'session.cancelled': '✅ Okay, let\'s start fresh! Upload a video or photo when you\'re ready. 😊',
     'session.status': '📊 Current Status',
     'session.mediaUploaded': '📹 Media Uploaded',
     'session.awaitingIntent': '🎯 Awaiting your intent',
@@ -56,16 +55,15 @@ export const translations = {
   
   uk: {
     // Welcome & Commands
-    'welcome.title': '👋 Вітаю в AI Content Agent!',
-    'welcome.description': 'Я допомагаю створювати YouTube Shorts та пости для Facebook з ваших відео та фото.',
-    'welcome.cta': '📹 Завантажте відео або 📸 фото щоб почати!',
-    'welcome.commands': 'Команди:',
-    'command.cancel': '/cancel - Скасувати поточну сесію',
-    'command.status': '/status - Перевірити статус сесії',
+    'welcome.title': '👋 Привіт!',
+    'welcome.description': 'Я допомагаю створювати класні YouTube Shorts та пости для Facebook з твоїх відео та фото. Просто завантаж щось і я зроблю решту! ✨',
+    'welcome.cta': '📹 Завантаж відео або 📸 фото щоб почати!',
+    'welcome.commands': 'Швидкі команди:',
+    'command.cancel': '/cancel - Почати спочатку',
+    'command.status': '/status - Що відбувається',
     
     // Session
-    'session.noActive': 'Немає активної сесії. Завантажте фото або відео щоб почати!',
-    'session.cancelled': '❌ Сесію скасовано.',
+    'session.cancelled': '✅ Гаразд, почнемо спочатку! Завантаж відео або фото коли будеш готовий. 😊',
     'session.status': '📊 Поточний Статус',
     'session.mediaUploaded': '📹 Медіа Завантажено',
     'session.awaitingIntent': '🎯 Очікую вашу мету',

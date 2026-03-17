@@ -20,7 +20,7 @@
     "@ai-agent/media": "workspace:*",
     "@ai-agent/config": "workspace:*",
     "@ai-agent/observability": "workspace:*",
-    "@ai-agent/utils": "workspace:*",
+    "@google/generative-ai": "^0.21.0",
     "telegraf": "^4.16.3",
     "axios": "^1.7.2",
     "dotenv": "^16.4.7"

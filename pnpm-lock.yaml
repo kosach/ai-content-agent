@@ -105,9 +105,9 @@ importers:
       '@ai-agent/storage':
         specifier: workspace:*
         version: link:../../packages/storage
-      '@ai-agent/utils':
-        specifier: workspace:*
-        version: link:../../packages/utils
+      '@google/generative-ai':
+        specifier: ^0.21.0
+        version: 0.21.0
       axios:
         specifier: ^1.7.2
         version: 1.13.6
