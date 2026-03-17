@@ -205,35 +205,36 @@ async function handleMediaUpload(
       data: { status: SessionStatus.ASKING_QUESTIONS },
     });
 
-    // Get next question from content agent
-    const mediaCount = await database.mediaAsset.count({
-      where: { sessionId: session.id },
-    });
-
-    const agentResponse = await contentAgent.getNextQuestion({
-      sessionId: session.id,
-      status: session.status as any,
-      mediaCount,
-      hasUserIntent: !!session.userIntent,
-      hasTone: !!session.tone,
-      messages: [],
-    });
+    // Get appropriate question based on session state
+    let questionKey: string;
+    const hasUserIntent = !!session.userIntent;
+    const hasTone = !!session.tone;
+    
+    if (!hasUserIntent) {
+      questionKey = 'question.mediaReceived';
+    } else if (!hasTone) {
+      questionKey = 'question.toneOptions';
+    } else {
+      questionKey = 'question.readyToGenerate';
+    }
+    
+    const message = tc(ctx, questionKey as any);
 
     // Save agent response
     await database.sessionMessage.create({
       data: {
         sessionId: session.id,
         role: MessageRole.AGENT,
-        content: agentResponse.message,
+        content: message,
       },
     });
 
-    await ctx.reply(agentResponse.message);
+    await ctx.reply(message);
 
     logger.info({ sessionId: session.id, mediaType: media.type }, 'Media uploaded');
   } catch (error) {
     logger.error({ error }, 'Failed to handle media upload');
-    await ctx.reply('Failed to process media. Please try again.');
+    await ctx.reply(tc(ctx, 'error.generic'));
   }
 }
 

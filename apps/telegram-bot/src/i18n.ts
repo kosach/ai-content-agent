@@ -32,8 +32,11 @@ export const translations = {
     'media.analyzing': '🔍 Analyzing...\n\nThis may take a moment.',
     
     // Questions
+    'question.mediaReceived': '✨ Got your media!\n\nWhat would you like to create with this?\n\nFor example:\n• "Promote my new product"\n• "Share a tutorial"\n• "Tell my brand story"\n• "Announce an event"',
     'question.intent': '🎯 What do you want to achieve with this content?\n\nFor example: educate, entertain, sell a product, inspire, etc.',
     'question.tone': '🎨 What tone should the content have?\n\nFor example: professional, casual, funny, inspiring, educational, etc.',
+    'question.toneOptions': 'Great! What tone would you like?\n\n🎯 Professional\n😊 Casual & friendly\n😂 Funny & engaging\n✨ Inspiring\n📚 Educational\n\nOr describe your own style!',
+    'question.readyToGenerate': '🚀 Perfect! I have everything I need.\n\nGenerating content now... ✨',
     
     // Drafts
     'drafts.ready': '✅ Content drafts are ready!\n\nReview and approve or request edits.',
@@ -80,8 +83,11 @@ export const translations = {
     'media.analyzing': '🔍 Аналізую...\n\nЦе може зайняти трохи часу.',
     
     // Questions
+    'question.mediaReceived': '✨ Отримав твоє медіа!\n\nЩо ти хочеш створити з ним?\n\nНаприклад:\n• "Прорекламувати мій новий продукт"\n• "Поділитися туторіалом"\n• "Розповісти історію мого бренду"\n• "Анонсувати подію"',
     'question.intent': '🎯 Чого ви хочете досягти цим контентом?\n\nНаприклад: навчити, розважити, продати продукт, надихнути тощо.',
     'question.tone': '🎨 Який тон повинен мати контент?\n\nНаприклад: професійний, невимушений, веселий, надихаючий, освітній тощо.',
+    'question.toneOptions': 'Чудово! Який тон ти хочеш?\n\n🎯 Професійний\n😊 Невимушений і дружній\n😂 Веселий і захопливий\n✨ Надихаючий\n📚 Освітній\n\nАбо опиши свій власний стиль!',
+    'question.readyToGenerate': '🚀 Ідеально! У мене є все що потрібно.\n\nГенерую контент зараз... ✨',
     
     // Drafts
     'drafts.ready': '✅ Чернетки контенту готові!\n\nПерегляньте та схваліть або попросіть редагувати.',
