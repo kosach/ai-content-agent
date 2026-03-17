@@ -67,15 +67,27 @@ export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
     logger.info({ storageUrl }, 'Uploaded to S3 successfully');
 
     // 4. Analyze with AI (ContentAgent uses OpenClaw/Gemini)
-    logger.info({ mediaAssetId, mediaType }, 'Analyzing media with AI');
+    logger.info({ mediaAssetId, mediaType, storageUrl }, 'Analyzing media with AI');
 
-    const analysis = await contentAgent.analyzeMedia({
-      mediaType,
-      mediaUrl: storageUrl,
-      duration: mediaAsset.duration || undefined,
-    });
-
-    logger.info({ mediaAssetId, analysis }, 'Analysis completed');
+    let analysis;
+    try {
+      analysis = await contentAgent.analyzeMedia({
+        mediaType,
+        mediaUrl: storageUrl,
+        duration: mediaAsset.duration || undefined,
+      });
+      logger.info({ mediaAssetId, analysisKeys: Object.keys(analysis) }, 'Analysis completed successfully');
+    } catch (analysisError: any) {
+      logger.error({ 
+        error: analysisError, 
+        message: analysisError?.message, 
+        stack: analysisError?.stack,
+        cause: analysisError?.cause,
+        mediaType,
+        storageUrl
+      }, 'AI analysis API call failed');
+      throw new Error(`AI analysis failed: ${analysisError?.message || 'Unknown error'}`);
+    }
 
     // 5. Update media asset
     await database.mediaAsset.update({
@@ -95,14 +107,25 @@ export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
         analysis,
       },
     };
-  } catch (error) {
-    logger.error({ sessionId, mediaAssetId, error }, 'Media analysis failed');
+  } catch (error: any) {
+    logger.error({ 
+      sessionId, 
+      mediaAssetId, 
+      error, 
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name
+    }, 'Media analysis job failed');
 
     // Mark as failed
-    await database.mediaAsset.update({
-      where: { id: mediaAssetId },
-      data: { analyzed: false },
-    });
+    try {
+      await database.mediaAsset.update({
+        where: { id: mediaAssetId },
+        data: { analyzed: false },
+      });
+    } catch (dbError) {
+      logger.error({ dbError }, 'Failed to mark media asset as failed');
+    }
 
     throw error;
   }

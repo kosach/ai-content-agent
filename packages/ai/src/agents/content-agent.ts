@@ -125,10 +125,16 @@ export class ContentAgent {
     targetAudience: string;
     keyMoments?: Array<{ timestamp: string; description: string }>;
   }> {
-    logger.info({ mediaType: params.mediaType }, 'Analyzing media with Gemini Vision');
+    logger.info({ mediaType: params.mediaType, mediaUrl: params.mediaUrl }, 'Analyzing media with Gemini Vision');
 
     // Load prompt template
-    const promptTemplate = await readPromptFile('analysis/media-analyzer.prompt.md');
+    let promptTemplate;
+    try {
+      promptTemplate = await readPromptFile('analysis/media-analyzer.prompt.md');
+    } catch (promptError: any) {
+      logger.error({ error: promptError, message: promptError?.message }, 'Failed to load analysis prompt template');
+      throw new Error(`Prompt loading failed: ${promptError?.message}`);
+    }
 
     // Render template with params
     const prompt = this.renderTemplate(promptTemplate, {
@@ -138,14 +144,25 @@ export class ContentAgent {
     });
 
     // Call Gemini Vision API
-    const analysis = await geminiVisionProvider.analyzeMedia({
-      mediaUrl: params.mediaUrl,
-      mediaType: params.mediaType,
-      duration: params.duration,
-      prompt,
-    });
-
-    logger.info({ analysis }, 'Media analysis completed with Gemini');
+    let analysis;
+    try {
+      analysis = await geminiVisionProvider.analyzeMedia({
+        mediaUrl: params.mediaUrl,
+        mediaType: params.mediaType,
+        duration: params.duration,
+        prompt,
+      });
+      logger.info({ analysisKeys: Object.keys(analysis), topics: analysis.topics?.length }, 'Media analysis completed with Gemini');
+    } catch (visionError: any) {
+      logger.error({ 
+        error: visionError, 
+        message: visionError?.message, 
+        stack: visionError?.stack,
+        mediaType: params.mediaType,
+        mediaUrl: params.mediaUrl
+      }, 'Gemini Vision API call failed');
+      throw new Error(`Vision API failed: ${visionError?.message || 'Unknown error'}`);
+    }
 
     return analysis;
   }
