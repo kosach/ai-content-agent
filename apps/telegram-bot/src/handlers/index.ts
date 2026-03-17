@@ -15,6 +15,7 @@ import { logger } from '@ai-agent/observability';
 
 import { handleCallbackQuery } from './callback';
 import { handleConnectYouTube, handleConnectFacebook, handleAccounts, handleDisconnect } from './connect';
+import { tc } from '../i18n';
 
 /**
  * Telegram Bot Handlers - MVP Flow
@@ -77,18 +78,18 @@ async function handleStart(ctx: Context) {
     });
 
     await ctx.reply(
-      '👋 Welcome to AI Content Agent!\n\n' +
-      'I help you create YouTube Shorts and Facebook posts from your videos and photos.\n\n' +
-      '📹 Upload a video or 📸 photo to start!\n\n' +
-      'Commands:\n' +
-      '/cancel - Cancel current session\n' +
-      '/status - Check session status'
+      tc(ctx, 'welcome.title') + '\n\n' +
+      tc(ctx, 'welcome.description') + '\n\n' +
+      tc(ctx, 'welcome.cta') + '\n\n' +
+      tc(ctx, 'welcome.commands') + '\n' +
+      tc(ctx, 'command.cancel') + '\n' +
+      tc(ctx, 'command.status')
     );
 
     logger.info({ userId: user.id }, 'User started bot');
   } catch (error) {
     logger.error({ error, telegramId: ctx.from.id }, 'Failed to start bot');
-    await ctx.reply('Sorry, something went wrong. Please try again.');
+    await ctx.reply(tc(ctx, 'error.generic'));
   }
 }
 
