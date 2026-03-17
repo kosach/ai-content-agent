@@ -213,7 +213,7 @@ export class ContentAgent {
       result = await geminiTextProvider.generateText({
         prompt,
         temperature: 0.8,
-        maxTokens: 2048,
+        maxTokens: 4096, // Increased for Ukrainian content (longer than English)
         responseFormat: 'json',
       });
       logger.info({ textLength: result.text.length }, 'Gemini API response received');

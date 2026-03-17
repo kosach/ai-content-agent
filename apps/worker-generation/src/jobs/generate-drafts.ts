@@ -51,7 +51,16 @@ export async function generateDraftsJob(job: Job<GenerateDraftsJobData>) {
 
     logger.info({ sessionId, drafts }, 'Drafts generated successfully');
 
-    // 3. Create DraftPackage in database
+    // 3. Select primary media for publishing
+    const primaryVideo = session.mediaAssets.find(m => m.type === 'VIDEO');
+    const primaryImage = session.mediaAssets.find(m => m.type === 'PHOTO');
+    
+    logger.info({ 
+      primaryVideoId: primaryVideo?.id, 
+      primaryImageId: primaryImage?.id 
+    }, 'Selected primary media for draft package');
+
+    // 4. Create DraftPackage in database
     const draftPackage = await database.draftPackage.create({
       data: {
         sessionId,
@@ -60,6 +69,8 @@ export async function generateDraftsJob(job: Job<GenerateDraftsJobData>) {
         youtubeHashtags: drafts.youtubeShort.hashtags,
         facebookText: drafts.facebookPost.text,
         facebookHashtags: drafts.facebookPost.hashtags,
+        primaryVideoId: primaryVideo?.id, // Link to actual video file
+        primaryImageId: primaryImage?.id, // Link to thumbnail/cover
         status: 'DRAFT',
         version: 1,
       },
@@ -67,7 +78,7 @@ export async function generateDraftsJob(job: Job<GenerateDraftsJobData>) {
 
     logger.info({ sessionId, draftPackageId: draftPackage.id }, 'DraftPackage created');
 
-    // 4. Update session status
+    // 5. Update session status
     await database.contentSession.update({
       where: { id: sessionId },
       data: { status: SessionStatus.AWAITING_APPROVAL },
@@ -75,7 +86,7 @@ export async function generateDraftsJob(job: Job<GenerateDraftsJobData>) {
 
     logger.info({ sessionId }, 'Session status updated to AWAITING_APPROVAL');
 
-    // 5. Send draft preview to user via Telegram
+    // 6. Send draft preview to user via Telegram
     const telegramChatId = session.brandProfile.user.telegramId;
 
     await telegramNotification.sendDraftPreview({

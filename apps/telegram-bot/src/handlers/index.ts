@@ -241,7 +241,39 @@ async function handleMediaUpload(
       });
 
       await ctx.reply(message);
-      logger.info({ sessionId: session.id }, 'Intent question sent after debounce');
+      logger.info({ sessionId: session.id, questionKey }, 'Intent question sent after debounce');
+
+      // If ready to generate, enqueue draft generation job
+      if (questionKey === 'question.readyToGenerate') {
+        logger.info({ sessionId: session.id }, 'Enqueueing draft generation job');
+        
+        // Fetch analyzed media for this session
+        const analyzedMedia = await database.mediaAsset.findMany({
+          where: {
+            sessionId: session.id,
+            analyzed: true,
+          },
+        });
+        
+        if (analyzedMedia.length === 0) {
+          logger.warn({ sessionId: session.id }, 'No analyzed media found, skipping draft generation');
+          return;
+        }
+        
+        // Combine analysis from all media (use first one for now, TODO: merge multiple)
+        const combinedAnalysis = analyzedMedia[0].analysisResult as any;
+        
+        const draftJobData: GenerateDraftsJobData = {
+          sessionId: session.id,
+          brandProfileId: updatedSession.brandProfileId,
+          userIntent: updatedSession.userIntent || '',
+          tone: updatedSession.tone || '',
+          mediaAnalysis: combinedAnalysis,
+        };
+        
+        await queueService.enqueue(JobType.GENERATE_DRAFTS, draftJobData);
+        logger.info({ sessionId: session.id, analyzedMediaCount: analyzedMedia.length }, 'Draft generation job enqueued');
+      }
     });
 
     logger.info({ 
