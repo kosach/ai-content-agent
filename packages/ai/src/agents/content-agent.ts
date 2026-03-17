@@ -191,24 +191,42 @@ export class ContentAgent {
     });
 
     // Call Gemini Text API
-    const result = await geminiTextProvider.generateText({
-      prompt,
-      temperature: 0.8,
-      maxTokens: 2048,
-      responseFormat: 'json',
-    });
+    let result;
+    try {
+      result = await geminiTextProvider.generateText({
+        prompt,
+        temperature: 0.8,
+        maxTokens: 2048,
+        responseFormat: 'json',
+      });
+      logger.info({ textLength: result.text.length }, 'Gemini API response received');
+    } catch (apiError: any) {
+      logger.error({ 
+        error: apiError, 
+        message: apiError?.message, 
+        stack: apiError?.stack,
+        cause: apiError?.cause 
+      }, 'Gemini API call failed');
+      throw new Error(`Gemini API failed: ${apiError?.message || 'Unknown error'}`);
+    }
 
     // Parse JSON response
     let drafts: any;
     try {
       drafts = JSON.parse(result.text);
-    } catch (parseError) {
-      logger.error({ text: result.text, parseError }, 'Failed to parse draft generation response');
+    } catch (parseError: any) {
+      logger.error({ text: result.text, parseError, message: parseError?.message }, 'Failed to parse draft generation response');
       throw new Error('Failed to parse AI response');
     }
 
     // Validate against schema
-    const validated = DraftGenerationSchema.parse(drafts);
+    let validated;
+    try {
+      validated = DraftGenerationSchema.parse(drafts);
+    } catch (validationError: any) {
+      logger.error({ drafts, validationError, message: validationError?.message }, 'Schema validation failed');
+      throw new Error(`Schema validation failed: ${validationError?.message || 'Unknown error'}`);
+    }
 
     logger.info({ validated }, 'Draft generation completed');
 
