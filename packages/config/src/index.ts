@@ -52,15 +52,15 @@ const ConfigSchema = z.object({
 
   // YouTube OAuth
   youtube: z.object({
-    clientId: z.string().min(1).optional(),
-    clientSecret: z.string().min(1).optional(),
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
     redirectUri: z.string().optional(),
   }),
 
   // Facebook OAuth
   facebook: z.object({
-    appId: z.string().min(1).optional(),
-    appSecret: z.string().min(1).optional(),
+    appId: z.string().optional(),
+    appSecret: z.string().optional(),
     redirectUri: z.string().optional(),
   }),
 
@@ -79,7 +79,7 @@ const ConfigSchema = z.object({
   // Observability
   observability: z.object({
     logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
-    otelEndpoint: z.string().url().optional(),
+    otelEndpoint: z.string().optional(),
   }),
 });
 
