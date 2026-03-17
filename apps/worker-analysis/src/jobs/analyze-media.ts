@@ -66,17 +66,21 @@ export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
 
     logger.info({ storageUrl }, 'Uploaded to S3 successfully');
 
-    // 4. Analyze with AI (ContentAgent uses OpenClaw/Gemini)
-    logger.info({ mediaAssetId, mediaType, storageUrl }, 'Analyzing media with AI');
+    // 4. Generate signed URL for analysis (MinIO requires auth)
+    const signedUrl = await s3Storage.generateSignedUrl(s3Key, 3600); // 1 hour expiry
+    logger.info({ signedUrl: signedUrl.substring(0, 100) + '...' }, 'Generated signed URL for analysis');
+
+    // 5. Analyze with AI (ContentAgent uses OpenClaw/Gemini)
+    logger.info({ mediaAssetId, mediaType }, 'Analyzing media with AI');
 
     let analysis;
     try {
       analysis = await contentAgent.analyzeMedia({
         mediaType,
-        mediaUrl: storageUrl,
+        mediaUrl: signedUrl, // Use signed URL instead of public URL
         duration: mediaAsset.duration || undefined,
       });
-      logger.info({ mediaAssetId, analysisKeys: Object.keys(analysis) }, 'Analysis completed successfully');
+      logger.info({ mediaAssetId, analysisKeys: Object.keys(analysis), topicsCount: analysis.topics?.length }, 'Analysis completed successfully');
     } catch (analysisError: any) {
       logger.error({ 
         error: analysisError, 
@@ -89,11 +93,11 @@ export async function analyzeMediaJob(job: Job<AnalyzeMediaJobData>) {
       throw new Error(`AI analysis failed: ${analysisError?.message || 'Unknown error'}`);
     }
 
-    // 5. Update media asset
+    // 6. Update media asset
     await database.mediaAsset.update({
       where: { id: mediaAssetId },
       data: {
-        storageUrl,
+        storageUrl, // Store public URL (for reference)
         analyzed: true,
         analysisResult: analysis as any,
       },
