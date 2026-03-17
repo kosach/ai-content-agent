@@ -2,6 +2,7 @@ import { Job } from 'bullmq';
 import { database } from '@ai-agent/database';
 import { contentAgent } from '@ai-agent/ai';
 import { telegramNotification } from '@ai-agent/media';
+import { s3Storage } from '@ai-agent/storage';
 import { logger } from '@ai-agent/observability';
 import { GenerateDraftsJobData, SessionStatus } from '@ai-agent/core';
 
@@ -86,13 +87,33 @@ export async function generateDraftsJob(job: Job<GenerateDraftsJobData>) {
 
     logger.info({ sessionId }, 'Session status updated to AWAITING_APPROVAL');
 
-    // 6. Send draft preview to user via Telegram
+    // 6. Generate signed URLs for preview (Telegram can't access localhost:9000)
+    let videoPreviewUrl: string | undefined;
+    let imagePreviewUrl: string | undefined;
+    
+    if (primaryVideo?.storageUrl) {
+      // Extract S3 key from URL: http://localhost:9000/bucket/key
+      const urlParts = primaryVideo.storageUrl.split('/');
+      const s3Key = urlParts.slice(4).join('/'); // media/session/file.ext
+      videoPreviewUrl = await s3Storage.generateSignedUrl(s3Key, 3600); // 1 hour
+      logger.info({ videoPreviewUrl: videoPreviewUrl.substring(0, 100) + '...' }, 'Generated video preview URL');
+    }
+    
+    if (primaryImage?.storageUrl) {
+      const urlParts = primaryImage.storageUrl.split('/');
+      const s3Key = urlParts.slice(4).join('/');
+      imagePreviewUrl = await s3Storage.generateSignedUrl(s3Key, 3600);
+    }
+
+    // 7. Send draft preview to user via Telegram
     const telegramChatId = session.brandProfile.user.telegramId;
 
     await telegramNotification.sendDraftPreview({
       chatId: telegramChatId,
       sessionId,
       draftPackageId: draftPackage.id,
+      videoUrl: videoPreviewUrl,
+      imageUrl: imagePreviewUrl,
       youtubeShort: {
         title: drafts.youtubeShort.title,
         description: drafts.youtubeShort.description,

@@ -50,12 +50,70 @@ export class TelegramNotificationService {
   }
 
   /**
+   * Send video file (downloads from URL and uploads to Telegram)
+   */
+  async sendVideo(params: {
+    chatId: string | number;
+    videoUrl: string;
+    caption?: string;
+    filename?: string;
+  }): Promise<void> {
+    const { chatId, videoUrl, caption, filename = 'video.mp4' } = params;
+
+    logger.info({ chatId, videoUrl }, 'Sending video');
+
+    try {
+      // Download video from URL
+      const videoResponse = await axios.get(videoUrl, {
+        responseType: 'arraybuffer',
+      });
+      
+      const videoBuffer = Buffer.from(videoResponse.data);
+      logger.info({ chatId, videoSize: videoBuffer.length }, 'Video downloaded');
+
+      // Create form data
+      const FormData = require('form-data');
+      const form = new FormData();
+      
+      form.append('chat_id', chatId.toString());
+      form.append('video', videoBuffer, {
+        filename,
+        contentType: 'video/mp4',
+      });
+      
+      if (caption) {
+        form.append('caption', caption);
+      }
+      
+      form.append('supports_streaming', 'true');
+
+      // Upload to Telegram
+      const response = await axios.post(`${this.baseUrl}/sendVideo`, form, {
+        headers: form.getHeaders(),
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+
+      if (!response.data.ok) {
+        throw new Error(`Telegram API error: ${response.data.description}`);
+      }
+
+      logger.info({ chatId, messageId: response.data.result.message_id }, 'Video sent');
+    } catch (error) {
+      logger.error({ error, chatId, videoUrl }, 'Failed to send video');
+      throw error;
+    }
+  }
+
+  /**
    * Send draft preview with approval buttons
    */
   async sendDraftPreview(params: {
     chatId: string | number;
     sessionId: string;
     draftPackageId: string;
+    videoUrl?: string;
+    imageUrl?: string;
     youtubeShort: {
       title: string;
       description: string;
@@ -66,9 +124,18 @@ export class TelegramNotificationService {
       hashtags: string[];
     };
   }): Promise<void> {
-    const { chatId, sessionId, draftPackageId, youtubeShort, facebookPost } = params;
+    const { chatId, sessionId, draftPackageId, videoUrl, imageUrl, youtubeShort, facebookPost } = params;
 
-    logger.info({ chatId, sessionId, draftPackageId }, 'Sending draft preview');
+    logger.info({ chatId, sessionId, draftPackageId, hasVideo: !!videoUrl, hasImage: !!imageUrl }, 'Sending draft preview');
+
+    // Send video preview if available
+    if (videoUrl) {
+      await this.sendVideo({
+        chatId,
+        videoUrl,
+        caption: '🎬 Preview відео для YouTube Short',
+      });
+    }
 
     // Format message
     const message = this.formatDraftPreview(youtubeShort, facebookPost);
