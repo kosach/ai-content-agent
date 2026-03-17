@@ -35,7 +35,7 @@ const ConfigSchema = z.object({
   ai: z.object({
     gemini: z.object({
       apiKey: z.string().min(1, 'Gemini API key is required'),
-      model: z.string().default('gemini-2.0-flash-exp'),
+      model: z.string().default('gemini-2.5-flash'),
     }),
     openai: z.object({
       apiKey: z.string().optional(),

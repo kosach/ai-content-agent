@@ -12,7 +12,7 @@ import { GoogleAIFileManager } from '@google/generative-ai/server';
  * Gemini Vision Provider
  * 
  * Uses Google Gemini API for image and video analysis
- * Model: gemini-2.0-flash-exp (supports vision)
+ * Model: gemini-2.5-flash (supports vision)
  * 
  * Strategy:
  * - Small files (<10MB): Use inlineData (base64)
@@ -22,7 +22,7 @@ export class GeminiVisionProvider implements IVisionProvider {
   private modelName: string;
   private readonly SIZE_THRESHOLD_MB = 10;
 
-  constructor(modelName: string = 'gemini-2.0-flash-exp') {
+  constructor(modelName: string = 'gemini-2.5-flash') {
     this.modelName = modelName;
   }
 

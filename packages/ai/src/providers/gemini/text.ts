@@ -10,12 +10,12 @@ import { logger } from '@ai-agent/observability';
  * Gemini Text Provider
  * 
  * Uses Google Gemini API for text generation
- * Model: gemini-2.0-flash-exp (fast, supports long context)
+ * Model: gemini-2.5-flash (fast, supports long context)
  */
 export class GeminiTextProvider implements ITextProvider {
   private modelName: string;
 
-  constructor(modelName: string = 'gemini-2.0-flash-exp') {
+  constructor(modelName: string = 'gemini-2.5-flash') {
     this.modelName = modelName;
   }
 

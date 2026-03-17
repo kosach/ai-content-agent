@@ -26,7 +26,7 @@ class GeminiClient {
   /**
    * Get a generative model instance
    */
-  getModel(modelName: string = 'gemini-2.0-flash-exp'): GenerativeModel {
+  getModel(modelName: string = 'gemini-2.5-flash'): GenerativeModel {
     if (!this.genAI) {
       throw new Error('Gemini client not initialized. Call initialize() first.');
     }
